@@ -216,7 +216,8 @@
   #epTable th{ background:#ffffff; font-weight:600; color:#333333; }
   #epTable td.ep-name{ text-align:left; padding-left:8px; min-width:64px; font-weight:400; }
   #epTable td.ep-note{ text-align:left; padding-left:8px; min-width:70px; }
-  #epTable td.ep-day{ min-width:20px; color:#d92d20; font-weight:600; }
+  #epTable td.ep-day{ min-width:20px; color:#d92d20; font-weight:600; cursor:pointer; }
+  #epTable td.ep-day:hover{ outline:1px solid #0066cc; outline-offset:-1px; }
   #epTable .band-0{ background:#f4e9f8; }
   #epTable .band-1{ background:#fdf6d8; }
   #epTable .band-2{ background:#e3f5ea; }
@@ -332,6 +333,7 @@
           <label class="field-label">공지성 메시지로 무시할 최대 글자 수</label>
           <input type="number" id="settingNoticeMax" min="1">
         </div>
+        <p class="hint" style="margin:-4px 0 0;">"[공지]", "공지:", "안내드립니다" 처럼 공지로 보이는 문구가 담긴 메시지나, 묵상사이트 링크만 붙여넣고 별다른 글이 없는 메시지는 길이와 상관없이 자동으로 인증에서 제외됩니다.</p>
       </div>
 
       <div class="card">
@@ -368,6 +370,7 @@
           <label class="field-label">내보낼 월</label>
           <input type="month" id="exportMonth">
         </div>
+        <p class="hint" style="margin:var(--space-sm) 0 0;">표의 날짜 칸을 클릭하면 빈칸 → O → - 순으로 바뀝니다. 자동 판정이 틀렸을 때 직접 고칠 수 있어요.</p>
       </div>
 
       <div class="card" id="exportEmptyCard">
@@ -454,6 +457,12 @@
     const wd = ['일','월','화','수','목','금','토'];
     return wd[new Date(y, m-1, d).getDay()];
   }
+  function addDays(dateStr, delta){
+    const [y,m,d] = dateStr.split('-').map(Number);
+    const dt = new Date(y, m-1, d);
+    dt.setDate(dt.getDate() + delta);
+    return toDateStr(dt.getFullYear(), dt.getMonth()+1, dt.getDate());
+  }
 
   /* ---------------- 탭 전환 ---------------- */
   document.querySelectorAll('.tab-btn').forEach(btn=>{
@@ -518,7 +527,9 @@
   /* ---------------- 통계(출석률/연속일수) ---------------- */
   function getStats(name, uptoDateStr){
     const month = uptoDateStr.slice(0, 7);
-    const dates = Object.keys(state.records).filter(d => d <= uptoDateStr && d.slice(0, 7) === month).sort();
+    const dates = Object.keys(state.records)
+      .filter(d => d <= uptoDateStr && d.slice(0, 7) === month && Object.prototype.hasOwnProperty.call(state.records[d], name))
+      .sort();
     const total = dates.length;
     let doneCount = 0;
     dates.forEach(d => { if (state.records[d][name]) doneCount++; });
@@ -588,6 +599,46 @@
     return /^사진(\s*\d+\s*장)?$/.test(text.trim());
   }
 
+  /* 운영자가 짧게 올리는 공지성 메시지(모임 안내 등)를 인증으로 오인하지 않도록 감지.
+     오탐을 줄이기 위해 "[공지]", "공지:" 처럼 명확한 표시가 있을 때만 매칭. */
+  function isNoticeMessage(text){
+    const t = text.trim();
+    if (/^\[(공지|안내|필독|알림|중요)\]/.test(t)) return true;
+    if (/^(공지|안내|필독|알림)\s*[:：]/.test(t)) return true;
+    if (/^[📢🔔❗‼️📌⚠️]/.test(t)) return true;
+    if (/(공지사항|공지드립니다|공지드려요|안내드립니다|안내드려요|알려드립니다|알려드려요)/.test(t)) return true;
+    return false;
+  }
+
+  /* 매일성경 링크 등 "링크만 붙여넣는" 메시지는 개인 묵상이 아니라 공유용이므로,
+     링크를 뺀 나머지 글자가 인증 기준 글자 수에 못 미치면 제외 */
+  function isLinkOnlyMessage(text){
+    const t = text.trim();
+    if (!/https?:\/\//.test(t)) return false;
+    const withoutUrls = t.replace(/https?:\/\/\S+/g, '').trim();
+    return withoutUrls.length < state.settings.threshold;
+  }
+
+  const PHOTO_CATCHUP_LOOKBACK = 14;
+
+  /* dateStr 이전으로 거슬러 올라가며, 이 사람이 완료로 기록되지 않은 연속 날짜를 모음
+     (이미 완료로 기록된 날을 만나거나, 기록 자체가 없는 범위까지 가면 멈춤) */
+  function collectMissingDates(name, beforeDateStr, maxLookback){
+    const recordedDates = Object.keys(state.records).sort();
+    const minDate = recordedDates.length ? recordedDates[0] : null;
+    const dates = [];
+    let d = addDays(beforeDateStr, -1);
+    while (dates.length < maxLookback){
+      if (minDate && d < minDate) break;
+      const rec = state.records[d];
+      const isDone = rec && Object.prototype.hasOwnProperty.call(rec, name) && rec[name];
+      if (isDone) break;
+      dates.push(d);
+      d = addDays(d, -1);
+    }
+    return dates;
+  }
+
   function analyze(dateStr){
     const allMessages = parseChat(state.lastChatText || '');
     const dayMessages = allMessages.filter(m => resolveMessageDate(m.text, m.date) === dateStr);
@@ -602,9 +653,12 @@
 
     const doneByReal = {};
     const unmapped = [];
+    const photoReview = [];
     todaySenders.forEach(sender=>{
       const msgs = bySender[sender];
-      const qualifying = msgs.filter(t => t.trim().length <= state.settings.noticeMax);
+      const qualifying = msgs.filter(t =>
+        t.trim().length <= state.settings.noticeMax && !isNoticeMessage(t) && !isLinkOnlyMessage(t)
+      );
       const photoOk = !state.photoExcluded.includes(sender);
       const done = qualifying.some(t =>
         t.trim().length >= state.settings.threshold ||
@@ -614,6 +668,25 @@
       const real = state.mapping[sender];
       if (!real){ unmapped.push(sender); return; }
       doneByReal[real] = !!doneByReal[real] || done;
+
+      if (photoOk){
+        const multiPhoto = msgs.map(t=>t.trim()).find(t => /^사진\s*\d+\s*장$/.test(t));
+        if (multiPhoto){
+          const count = +/^사진\s*(\d+)\s*장$/.exec(multiPhoto)[1];
+          if (count >= 2){
+            const missing = collectMissingDates(real, dateStr, PHOTO_CATCHUP_LOOKBACK);
+            if (missing.length + 1 === count){
+              missing.forEach(d=>{
+                state.records[d] = state.records[d] || {};
+                state.records[d][real] = true;
+              });
+              doneByReal[real] = true;
+            } else {
+              photoReview.push({ name: real, count, missing: missing.length });
+            }
+          }
+        }
+      }
     });
 
     state.records[dateStr] = state.records[dateStr] || {};
@@ -625,7 +698,7 @@
       return { name: r.name, done: !!doneByReal[r.name], rate: s.rate, streak: s.streak };
     });
 
-    state.lastResults = { dateStr, rows, unmapped, todaySenders, noCandidates: todaySenders.length === 0 };
+    state.lastResults = { dateStr, rows, unmapped, todaySenders, photoReview, noCandidates: todaySenders.length === 0 };
     return state.lastResults;
   }
 
@@ -665,6 +738,9 @@
       const chips = result.unmapped.map(n=>`<span class="chip">${escapeHtml(n)}</span>`).join('');
       el.innerHTML += `<div class="banner banner-warning"><b>미매핑 이름 ${result.unmapped.length}건</b> — 아래 표시 이름이 명단에 연결되지 않아 집계에서 제외되었습니다. 「매핑」 탭에서 연결하세요.<div>${chips}</div></div>`;
     }
+    (result.photoReview || []).forEach(pr=>{
+      el.innerHTML += `<div class="banner banner-warning"><b>사진 일괄인증 확인 필요</b> — ${escapeHtml(pr.name)}님이 사진 ${pr.count}장을 올렸는데, 미완료로 보이는 이전 날짜는 ${pr.missing}일이라 자동으로 채우지 않았습니다. 「내보내기」 탭에서 날짜 칸을 눌러 직접 표시해주세요.</div>`;
+    });
   }
 
   function renderResultTable(result){
@@ -753,8 +829,12 @@
 
   function renderRoster(){
     const el = document.getElementById('rosterList');
-    el.innerHTML = state.roster.length
-      ? state.roster.map((r,i)=>`
+    const collator = new Intl.Collator('ko');
+    const ordered = state.roster
+      .map((r,i)=>({ r, i }))
+      .sort((a,b)=> collator.compare(a.r.name, b.r.name));
+    el.innerHTML = ordered.length
+      ? ordered.map(({r,i})=>`
           <div class="roster-item">
             <div class="roster-item-top">
               <input type="text" class="roster-name" data-i="${i}" value="${escapeHtml(r.name)}">
@@ -785,7 +865,7 @@
         const i = +input.dataset.i;
         const ok = renameRosterMember(i, input.value);
         input.value = state.roster[i].name;
-        if (ok) { renderMapping(); renderExportPreview(); }
+        if (ok) { renderRoster(); renderMapping(); renderExportPreview(); }
       });
     });
   }
@@ -949,6 +1029,22 @@
     return 'band-' + Math.min(3, Math.floor(i / chunk));
   }
 
+  function cellMark(name, dateStr){
+    const rec = state.records[dateStr];
+    if (!rec || !Object.prototype.hasOwnProperty.call(rec, name)) return '';
+    return rec[name] ? 'O' : '-';
+  }
+
+  /* 빈칸 → O → - → 빈칸 순으로 수동 순환 (내보내기 표에서 클릭으로 정정) */
+  function cycleMark(name, dateStr){
+    state.records[dateStr] = state.records[dateStr] || {};
+    const rec = state.records[dateStr];
+    if (!Object.prototype.hasOwnProperty.call(rec, name)) rec[name] = true;
+    else if (rec[name] === true) rec[name] = false;
+    else delete rec[name];
+    saveRecords();
+  }
+
   function renderExportPreview(){
     const emptyCard = document.getElementById('exportEmptyCard');
     const wrap = document.getElementById('exportPreviewWrap');
@@ -981,13 +1077,19 @@
       const band = bandClass(i, roster.length);
       const days = Array.from({length: dayCount}, (_,d)=>{
         const dateStr = toDateStr(y, m, d+1);
-        const rec = state.records[dateStr];
-        const mark = rec ? (rec[r.name] ? 'O' : '-') : '';
-        return `<td class="ep-day">${mark}</td>`;
+        const mark = cellMark(r.name, dateStr);
+        return `<td class="ep-day" data-name="${escapeHtml(r.name)}" data-date="${dateStr}">${mark}</td>`;
       }).join('');
       return `<tr class="${band}"><td class="ep-name">${escapeHtml(r.name)}</td>${days}<td class="ep-note">${escapeHtml(r.note || '')}</td></tr>`;
     }).join('');
   }
+
+  document.getElementById('epTbody').addEventListener('click', (e)=>{
+    const td = e.target.closest('td.ep-day');
+    if (!td) return;
+    cycleMark(td.dataset.name, td.dataset.date);
+    renderExportPreview();
+  });
 
   document.getElementById('btnExportPdf').addEventListener('click', ()=>{
     const el = document.getElementById('exportPreview');
@@ -1020,11 +1122,7 @@
     const roster = sortedRosterKorean();
     let csv = '이름,' + Array.from({length: dayCount}, (_,i)=>`${i+1}일`).join(',') + ',비고\n';
     roster.forEach(r=>{
-      const days = Array.from({length: dayCount}, (_,d)=>{
-        const dateStr = toDateStr(y, m, d+1);
-        const rec = state.records[dateStr];
-        return rec ? (rec[r.name] ? 'O' : '-') : '';
-      }).join(',');
+      const days = Array.from({length: dayCount}, (_,d)=> cellMark(r.name, toDateStr(y, m, d+1))).join(',');
       csv += `${r.name},${days},${r.note || ''}\n`;
     });
     const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
