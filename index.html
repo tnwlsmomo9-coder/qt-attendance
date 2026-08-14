@@ -1,0 +1,1035 @@
+2<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>QT 인증 도우미</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<style>
+  :root{
+    /* --- DESIGN.md 기반 토큰 (유틸리티 앱 스케일로 축소 적용) --- */
+    --color-primary: #0066cc;
+    --color-primary-focus: #0071e3;
+    --color-ink: #1d1d1f;
+    --color-ink-muted-80: #333333;
+    --color-ink-muted-48: #7a7a7a;
+    --color-canvas: #ffffff;
+    --color-canvas-parchment: #f5f5f7;
+    --color-surface-pearl: #fafafc;
+    --color-hairline: #e0e0e0;
+    --color-divider-soft: #f0f0f0;
+    --color-surface-black: #000000;
+    --color-on-dark: #ffffff;
+
+    /* --- DESIGN.md에 없는 확장 토큰: PRD가 요구하는 완료/미완료 상태색 --- */
+    --color-success: #1a9c4c;
+    --color-success-bg: #e8f7ee;
+    --color-danger: #d92d20;
+    --color-danger-bg: #fdecea;
+    --color-warning: #a15c07;
+    --color-warning-bg: #fdf3e0;
+
+    --radius-sm: 8px;
+    --radius-md: 11px;
+    --radius-lg: 18px;
+    --radius-pill: 9999px;
+
+    --space-xxs: 4px;
+    --space-xs: 8px;
+    --space-sm: 12px;
+    --space-md: 17px;
+    --space-lg: 24px;
+    --space-xl: 32px;
+
+    --shadow-float: 0 5px 30px rgba(0,0,0,0.16);
+
+    --font-sans: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Malgun Gothic', system-ui, sans-serif;
+  }
+
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    font-family:var(--font-sans);
+    color:var(--color-ink);
+    background:var(--color-canvas-parchment);
+    -webkit-font-smoothing:antialiased;
+  }
+
+  .app{ max-width:720px; margin:0 auto; min-height:100vh; background:var(--color-canvas-parchment); }
+
+  /* Top bar (global-nav 모티프: 검정, 얇은 높이) */
+  .topbar{
+    background:var(--color-surface-black);
+    color:var(--color-on-dark);
+    height:52px;
+    display:flex; align-items:center; justify-content:space-between;
+    padding:0 var(--space-lg);
+    position:sticky; top:0; z-index:20;
+  }
+  .topbar h1{ font-size:15px; font-weight:600; letter-spacing:-0.12px; margin:0; }
+  .topbar .today{ font-size:12px; color:#cccccc; font-weight:400; }
+
+  /* Tab bar (sub-nav-frosted 모티프) */
+  .tabbar{
+    display:flex;
+    background:rgba(245,245,247,0.92);
+    backdrop-filter:saturate(180%) blur(20px);
+    -webkit-backdrop-filter:saturate(180%) blur(20px);
+    position:sticky; top:52px; z-index:19;
+    border-bottom:1px solid var(--color-hairline);
+  }
+  .tab-btn{
+    flex:1;
+    border:none; background:transparent; cursor:pointer;
+    font-family:var(--font-sans);
+    font-size:13px; font-weight:600; letter-spacing:-0.12px;
+    color:var(--color-ink-muted-48);
+    padding:14px 4px 12px;
+    border-bottom:2px solid transparent;
+  }
+  .tab-btn.active{ color:var(--color-primary); border-bottom-color:var(--color-primary); }
+
+  main{ padding:var(--space-lg) var(--space-lg) 80px; }
+  .panel{ display:none; }
+  .panel.active{ display:block; }
+
+  .card{
+    background:var(--color-canvas);
+    border:1px solid var(--color-hairline);
+    border-radius:var(--radius-lg);
+    padding:var(--space-lg);
+    margin-bottom:var(--space-lg);
+  }
+  .card h2{ font-size:17px; font-weight:600; letter-spacing:-0.374px; margin:0 0 var(--space-sm); }
+  .card .hint{ font-size:13px; color:var(--color-ink-muted-48); line-height:1.5; margin:-4px 0 var(--space-md); }
+
+  label.field-label{ display:block; font-size:13px; font-weight:600; color:var(--color-ink-muted-80); margin-bottom:6px; }
+  .field{ margin-bottom:var(--space-md); }
+
+  input[type=text], input[type=number], input[type=date], textarea, select{
+    width:100%;
+    font-family:var(--font-sans);
+    font-size:15px; color:var(--color-ink);
+    background:var(--color-canvas);
+    border:1px solid var(--color-hairline);
+    border-radius:var(--radius-sm);
+    padding:10px 12px;
+  }
+  textarea{ resize:vertical; min-height:120px; line-height:1.5; }
+  input:focus, textarea:focus, select:focus{ outline:2px solid var(--color-primary-focus); outline-offset:1px; border-color:var(--color-primary-focus); }
+
+  .row{ display:flex; gap:var(--space-sm); align-items:center; flex-wrap:wrap; }
+  .row > *{ flex:1; }
+
+  /* Buttons: DESIGN.md의 pill(주요 행동) vs rect(보조/유틸) 문법 */
+  .btn{
+    font-family:var(--font-sans);
+    cursor:pointer; border:none;
+    display:inline-flex; align-items:center; justify-content:center; gap:6px;
+    min-height:44px;
+  }
+  .btn-primary{
+    background:var(--color-primary); color:#fff;
+    font-size:15px; font-weight:400;
+    border-radius:var(--radius-pill);
+    padding:11px 22px;
+  }
+  .btn-primary:active{ transform:scale(0.97); }
+  .btn-secondary{
+    background:transparent; color:var(--color-primary);
+    border:1px solid var(--color-primary);
+    font-size:15px; font-weight:400;
+    border-radius:var(--radius-pill);
+    padding:10px 21px;
+  }
+  .btn-secondary:active{ transform:scale(0.97); }
+  .btn-utility{
+    background:var(--color-ink); color:#fff;
+    font-size:13px; font-weight:400;
+    border-radius:var(--radius-sm);
+    padding:8px 14px; min-height:36px;
+  }
+  .btn-utility:active{ transform:scale(0.95); }
+  .btn-icon-del{
+    background:var(--color-divider-soft); color:var(--color-ink-muted-80);
+    border-radius:var(--radius-pill);
+    width:28px; height:28px; min-height:28px; font-size:14px; line-height:1; padding:0;
+  }
+  .btn-block{ width:100%; }
+  .btn[disabled]{ opacity:0.4; cursor:not-allowed; }
+
+  /* 리스트 아이템 (명단/제외/매핑) */
+  .list-item{
+    display:flex; align-items:center; justify-content:space-between; gap:var(--space-sm);
+    padding:10px 0; border-bottom:1px solid var(--color-divider-soft);
+  }
+  .list-item:last-child{ border-bottom:none; }
+  .list-item .name{ font-size:15px; font-weight:400; }
+  .list-item select{ width:auto; max-width:150px; font-size:13px; padding:8px 10px; }
+
+  /* 명단 항목: 이름/삭제 한 줄 + 닉네임·비고 보조 입력 두 줄 */
+  .roster-item{ padding:10px 0; border-bottom:1px solid var(--color-divider-soft); }
+  .roster-item:last-child{ border-bottom:none; }
+  .roster-item-top{ display:flex; align-items:center; justify-content:space-between; gap:var(--space-sm); }
+  .roster-item-top .name{ font-size:15px; font-weight:600; }
+  .roster-item-fields{ display:flex; gap:8px; margin-top:8px; }
+  .roster-item-fields input{ flex:1; font-size:13px; padding:8px 10px; }
+
+  .chip{
+    display:inline-flex; align-items:center; gap:6px;
+    background:var(--color-surface-pearl); border:1px solid var(--color-divider-soft);
+    border-radius:var(--radius-md); padding:6px 10px; font-size:13px; margin:4px 6px 0 0;
+  }
+
+  /* 경고 배너 */
+  .banner{ border-radius:var(--radius-md); padding:var(--space-sm) var(--space-md); font-size:13px; line-height:1.5; margin-bottom:var(--space-md); }
+  .banner-warning{ background:var(--color-warning-bg); color:var(--color-warning); }
+  .banner-info{ background:var(--color-divider-soft); color:var(--color-ink-muted-80); }
+  .banner b{ font-weight:600; }
+
+  /* 결과 테이블 */
+  table.result-table{ width:100%; border-collapse:collapse; font-size:14px; }
+  table.result-table th, table.result-table td{ text-align:left; padding:10px 8px; border-bottom:1px solid var(--color-divider-soft); }
+  table.result-table th{ font-size:12px; color:var(--color-ink-muted-48); font-weight:600; }
+  table.result-table td.center, table.result-table th.center{ text-align:center; }
+
+  .badge{ display:inline-flex; align-items:center; justify-content:center; min-width:26px; padding:3px 8px; border-radius:var(--radius-pill); font-size:13px; font-weight:600; }
+  .badge-done{ background:var(--color-success-bg); color:var(--color-success); }
+  .badge-undone{ background:var(--color-danger-bg); color:var(--color-danger); }
+
+  .empty{ font-size:13px; color:var(--color-ink-muted-48); padding:var(--space-md) 0; text-align:center; }
+
+  /* 내보내기 미리보기 카드 (캡처 대상: html2canvas 호환 위해 flat 컬러만 사용) */
+  #exportPreview{
+    background:#ffffff; border:1px solid #e0e0e0; border-radius:18px; padding:20px;
+  }
+  #exportPreview .ep-title{
+    font-size:20px; font-weight:700; color:#1d1d1f; text-align:center; margin:0 0 16px;
+  }
+  .ep-table-scroll{ overflow-x:auto; }
+  #epTable{ border-collapse:collapse; font-size:11px; white-space:nowrap; }
+  #epTable th, #epTable td{
+    border:1px solid #cfcfcf; padding:4px 3px; text-align:center;
+  }
+  #epTable th{ background:#ffffff; font-weight:600; color:#333333; }
+  #epTable td.ep-name{ text-align:left; padding-left:8px; min-width:64px; font-weight:400; }
+  #epTable td.ep-note{ text-align:left; padding-left:8px; min-width:70px; }
+  #epTable td.ep-day{ min-width:20px; color:#d92d20; font-weight:600; }
+  #epTable .band-0{ background:#f4e9f8; }
+  #epTable .band-1{ background:#fdf6d8; }
+  #epTable .band-2{ background:#e3f5ea; }
+  #epTable .band-3{ background:#fdeadb; }
+
+  .section-gap{ height:var(--space-xl); }
+
+  @media (max-width:420px){
+    main{ padding:var(--space-md); }
+    .tab-btn{ font-size:12px; padding:12px 2px 10px; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="topbar">
+    <h1>QT 인증 도우미</h1>
+    <span class="today" id="topbarDate"></span>
+  </div>
+
+  <div class="tabbar">
+    <button class="tab-btn active" data-tab="aggregate">집계</button>
+    <button class="tab-btn" data-tab="mapping">매핑</button>
+    <button class="tab-btn" data-tab="settings">명단·설정</button>
+    <button class="tab-btn" data-tab="export">내보내기</button>
+  </div>
+
+  <main>
+
+    <!-- ================= 집계 탭 ================= -->
+    <section class="panel active" id="panel-aggregate">
+      <div class="card">
+        <h2>대화 붙여넣기</h2>
+        <p class="hint">카톡 대화방에서 '대화 내보내기'한 텍스트를 통째로 붙여넣으세요. 선택한 날짜치만 자동으로 골라 집계합니다. 카톡 원문은 서버로 전송되지 않고 이 브라우저에만 저장됩니다.</p>
+        <div class="field">
+          <label class="field-label">집계 날짜</label>
+          <input type="date" id="aggDate">
+        </div>
+        <div class="field">
+          <label class="field-label">대화 내용</label>
+          <textarea id="chatInput" placeholder="여기에 카톡 대화 내용을 붙여넣으세요..."></textarea>
+        </div>
+        <div class="field">
+          <label class="field-label">또는 .txt 파일 업로드</label>
+          <input type="file" id="chatFile" accept=".txt">
+        </div>
+        <button class="btn btn-primary btn-block" id="btnAnalyze">분석</button>
+      </div>
+
+      <div id="aggWarnings"></div>
+
+      <div class="card" id="resultCard" style="display:none;">
+        <h2>집계 결과</h2>
+        <table class="result-table">
+          <thead>
+            <tr><th>이름</th><th class="center">오늘</th><th class="center">출석률(월)</th><th class="center">연속(월)</th></tr>
+          </thead>
+          <tbody id="resultTbody"></tbody>
+        </table>
+      </div>
+
+    </section>
+
+    <!-- ================= 매핑 탭 ================= -->
+    <section class="panel" id="panel-mapping">
+      <div class="card">
+        <h2>발신자 매핑</h2>
+        <p class="hint">최근 분석에서 발견된 표시 이름을 명단의 실명에 연결하세요. 한 번 연결하면 다음부터 자동으로 매칭됩니다. (닉네임을 미리 알고 있다면 「명단·설정」 탭에서 등록해도 됩니다.)</p>
+        <div id="mappingList"></div>
+      </div>
+    </section>
+
+    <!-- ================= 명단·설정 탭 ================= -->
+    <section class="panel" id="panel-settings">
+      <div class="card">
+        <h2>명단</h2>
+        <p class="hint">여부 표에 표시될 실명 목록입니다. 대화방 닉네임이 실명과 다르면 닉네임을 미리 등록해두세요 — 쉼표로 여러 개 등록 가능하며, 분석 시 자동으로 매핑됩니다.</p>
+        <div id="rosterList"></div>
+        <div class="row" style="margin-top:var(--space-sm);">
+          <input type="text" id="rosterInput" placeholder="이름 추가">
+          <button class="btn btn-utility" id="btnAddRoster" style="flex:none;">추가</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>제외 이름</h2>
+        <p class="hint">운영자·봇 등 집계에서 제외할 대화방 표시 이름입니다.</p>
+        <div id="excludedList"></div>
+        <div class="row" style="margin-top:var(--space-sm);">
+          <input type="text" id="excludedInput" placeholder="제외할 표시 이름 추가">
+          <button class="btn btn-utility" id="btnAddExcluded" style="flex:none;">추가</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>사진 인증 제외</h2>
+        <p class="hint">사진만 보낸 메시지는 기본적으로 인증 완료로 인정합니다. 다만 QT 사진이 아니라 기록표 등 다른 사진을 올리는 사람이 있다면, 그 사람의 대화방 표시 이름을 추가해 사진 자동 인정에서 제외하세요. (글자로 쓴 인증은 그대로 인정됩니다)</p>
+        <div id="photoExcludedList"></div>
+        <div class="row" style="margin-top:var(--space-sm);">
+          <input type="text" id="photoExcludedInput" placeholder="제외할 표시 이름 추가">
+          <button class="btn btn-utility" id="btnAddPhotoExcluded" style="flex:none;">추가</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>감지 설정</h2>
+        <div class="field">
+          <label class="field-label">완료 인정 최소 글자 수</label>
+          <input type="number" id="settingThreshold" min="1">
+        </div>
+        <div class="field">
+          <label class="field-label">공지성 메시지로 무시할 최대 글자 수</label>
+          <input type="number" id="settingNoticeMax" min="1">
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>PDF/PNG 표시 정보</h2>
+        <div class="field">
+          <label class="field-label">교회명</label>
+          <input type="text" id="settingRoomName" placeholder="예: 신천중부교회">
+        </div>
+        <div class="field">
+          <label class="field-label">오늘 묵상 본문</label>
+          <div class="row">
+            <input type="text" id="settingReading" placeholder="예: 시편 23편">
+            <button class="btn btn-utility" id="btnFetchReading" style="flex:none;">가져오기</button>
+          </div>
+          <p class="hint" style="margin:6px 0 0;">매일성경(sum.su.or.kr) 오늘의 묵상에서 본문을 자동으로 가져옵니다.</p>
+          <div id="readingFetchStatus"></div>
+        </div>
+        <div class="field">
+          <label class="field-label">날짜별 본문 수정</label>
+          <p class="hint" style="margin:-2px 0 var(--space-sm);">앱을 열지 않아 자동으로 못 가져온 과거 날짜의 본문을 직접 채워 넣을 수 있습니다.</p>
+          <div class="row">
+            <input type="date" id="readingEditDate">
+            <input type="text" id="readingEditText" placeholder="예: 이사야 26:1-27:1">
+          </div>
+          <button class="btn btn-utility btn-block" id="btnSaveReadingEdit" style="margin-top:var(--space-sm);">저장</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= 내보내기 탭 ================= -->
+    <section class="panel" id="panel-export">
+      <div class="card">
+        <div class="field" style="margin-bottom:0;">
+          <label class="field-label">내보낼 월</label>
+          <input type="month" id="exportMonth">
+        </div>
+      </div>
+
+      <div class="card" id="exportEmptyCard">
+        <p class="empty">「명단·설정」 탭에서 명단을 먼저 등록하세요.</p>
+      </div>
+
+      <div id="exportPreviewWrap" style="display:none;">
+        <div id="exportPreview">
+          <p class="ep-title" id="epTitle"></p>
+          <div class="ep-table-scroll">
+            <table id="epTable">
+              <thead>
+                <tr id="epHeadRow1"></tr>
+                <tr id="epHeadRow2"></tr>
+              </thead>
+              <tbody id="epTbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div id="exportActions" style="display:none; margin-top:var(--space-lg);">
+        <div class="row">
+          <button class="btn btn-primary" id="btnExportPdf">PDF 저장</button>
+          <button class="btn btn-secondary" id="btnExportPng">PNG 저장</button>
+        </div>
+        <button class="btn btn-utility btn-block" id="btnExportCsv" style="margin-top:var(--space-sm);">CSV로 저장</button>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ---------------- localStorage 유틸 ---------------- */
+  const LS = {
+    roster: 'qt_roster',
+    mapping: 'qt_mapping',
+    excluded: 'qt_excluded',
+    photoExcluded: 'qt_photoExcluded',
+    settings: 'qt_settings',
+    records: 'qt_records',
+    readings: 'qt_readings',
+    lastChat: 'qt_lastChatText'
+  };
+  function load(key, fallback){
+    try{ const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; }
+    catch(e){ return fallback; }
+  }
+  function save(key, value){ localStorage.setItem(key, JSON.stringify(value)); }
+
+  const state = {
+    roster: load(LS.roster, []).map(r => typeof r === 'string'
+      ? { name: r, note: '', aliases: [] }
+      : { name: r.name, note: r.note || '', aliases: r.aliases || [] }),
+    mapping: load(LS.mapping, {}),
+    excluded: load(LS.excluded, []),
+    photoExcluded: load(LS.photoExcluded, []),
+    settings: load(LS.settings, { threshold:20, noticeMax:200, roomName:'' }),
+    records: load(LS.records, {}),
+    readings: load(LS.readings, {}),
+    lastChatText: localStorage.getItem(LS.lastChat) || '',
+    lastResults: null
+  };
+
+  function saveRoster(){ save(LS.roster, state.roster); }
+  function saveMapping(){ save(LS.mapping, state.mapping); }
+  function saveExcluded(){ save(LS.excluded, state.excluded); }
+  function savePhotoExcluded(){ save(LS.photoExcluded, state.photoExcluded); }
+  function saveSettings(){ save(LS.settings, state.settings); }
+  function saveRecords(){ save(LS.records, state.records); }
+  function saveReadings(){ save(LS.readings, state.readings); }
+
+  /* ---------------- 날짜 유틸 ---------------- */
+  function pad(n){ return String(n).padStart(2,'0'); }
+  function toDateStr(y,m,d){ return `${y}-${pad(m)}-${pad(d)}`; }
+  function todayStr(){ const d=new Date(); return toDateStr(d.getFullYear(), d.getMonth()+1, d.getDate()); }
+  function yesterdayStr(){ const d=new Date(); d.setDate(d.getDate()-1); return toDateStr(d.getFullYear(), d.getMonth()+1, d.getDate()); }
+  function weekdayKor(dateStr){
+    const [y,m,d] = dateStr.split('-').map(Number);
+    const wd = ['일','월','화','수','목','금','토'];
+    return wd[new Date(y, m-1, d).getDay()];
+  }
+
+  /* ---------------- 탭 전환 ---------------- */
+  document.querySelectorAll('.tab-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+      document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('panel-'+btn.dataset.tab).classList.add('active');
+      if (btn.dataset.tab === 'mapping') renderMapping();
+      if (btn.dataset.tab === 'export') renderExportPreview();
+    });
+  });
+
+  /* ---------------- 카톡 파싱 ---------------- */
+  function parseChat(text){
+    const lines = text.split(/\r?\n/);
+    const messages = [];
+    let currentDate = null;
+
+    const reHeaderKR  = /^(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일\s*(오전|오후)\s*(\d{1,2}):(\d{2}),\s*(.+?)\s*:\s*(.*)$/;
+    const reHeaderDot = /^(\d{4})\.\s*(\d{1,2})\.\s*(\d{1,2})\.\s*(오전|오후)\s*(\d{1,2}):(\d{2}),\s*(.+?)\s*:\s*(.*)$/;
+    const reDateSep   = /^-+\s*(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일.*-+$/;
+    const reDateOnly  = /^(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일\s*[월화수목금토일]요일\s*$/;
+    const reTimeMsg   = /^(오전|오후)\s*(\d{1,2}):(\d{2}),\s*(.+?)\s*:\s*(.*)$/;
+    const reBracket   = /^\[(.+?)\]\s*\[(오전|오후)\s*(\d{1,2}):(\d{2})\]\s*(.*)$/;
+    const reSystem    = /(들어왔습니다|나갔습니다|저장한 날짜|채팅방 관리|메시지가 삭제되었습니다)/;
+
+    for (const raw of lines){
+      const line = raw.trim();
+      if (!line) continue;
+      let m;
+
+      if ((m = reHeaderKR.exec(line))){
+        currentDate = toDateStr(+m[1], +m[2], +m[3]);
+        messages.push({date: currentDate, sender: m[7].trim(), text: m[8]});
+        continue;
+      }
+      if ((m = reHeaderDot.exec(line))){
+        currentDate = toDateStr(+m[1], +m[2], +m[3]);
+        messages.push({date: currentDate, sender: m[7].trim(), text: m[8]});
+        continue;
+      }
+      if ((m = reDateSep.exec(line)) || (m = reDateOnly.exec(line))){
+        currentDate = toDateStr(+m[1], +m[2], +m[3]);
+        continue;
+      }
+      if (currentDate && (m = reTimeMsg.exec(line))){
+        messages.push({date: currentDate, sender: m[4].trim(), text: m[5]});
+        continue;
+      }
+      if (currentDate && (m = reBracket.exec(line))){
+        messages.push({date: currentDate, sender: m[1].trim(), text: m[5]});
+        continue;
+      }
+      if (messages.length && !reSystem.test(line)){
+        messages[messages.length-1].text += '\n' + line;
+      }
+    }
+    return messages;
+  }
+
+  /* ---------------- 통계(출석률/연속일수) ---------------- */
+  function getStats(name, uptoDateStr){
+    const month = uptoDateStr.slice(0, 7);
+    const dates = Object.keys(state.records).filter(d => d <= uptoDateStr && d.slice(0, 7) === month).sort();
+    const total = dates.length;
+    let doneCount = 0;
+    dates.forEach(d => { if (state.records[d][name]) doneCount++; });
+    const rate = total ? Math.round((doneCount/total)*100) : 0;
+    let streak = 0;
+    for (let i = dates.length-1; i>=0; i--){
+      if (state.records[dates[i]][name]) streak++; else break;
+    }
+    return { rate, streak };
+  }
+
+  /* ---------------- 분석 실행 ---------------- */
+  function readingTokens(reading){
+    const m = /^([가-힣]+)\s*(\d+)/.exec(reading || '');
+    if (!m) return null;
+    return { book: m[1], chapter: m[2] };
+  }
+
+  function mentionsReading(text, tokens){
+    if (!tokens) return false;
+    if (text.includes(tokens.book)) return true;
+    return new RegExp(`${tokens.chapter}\\s*[:장]`).test(text);
+  }
+
+  /* 메시지에 적힌 날짜(예: "8/13", "8월13일")를 실제 게시 시각 대신 우선 사용 */
+  function detectExplicitDate(text, fallbackDate){
+    const year = fallbackDate.slice(0, 4);
+    let m = /(\d{1,2})\s*월\s*(\d{1,2})\s*일/.exec(text);
+    if (!m) m = /(\d{1,2})\s*[\/.]\s*(\d{1,2})(?!\s*[:.\d])/.exec(text);
+    if (!m) return null;
+    const mo = +m[1], da = +m[2];
+    if (mo < 1 || mo > 12 || da < 1 || da > 31) return null;
+    return toDateStr(+year, mo, da);
+  }
+
+  /* 날짜 언급이 없으면, 그날그날 저장된 묵상 본문을 언급한 메시지로 날짜를 추정.
+     책 이름은 여러 날 걸쳐 반복되므로(예: "이사야"가 며칠씩 이어짐) 장 번호까지 일치해야 인정,
+     여러 날짜가 걸리면 게시 시각과 가장 가까운 날짜를 선택. */
+  function readingMatchScore(text, reading){
+    const tok = readingTokens(reading);
+    if (!tok) return 0;
+    const chapterHit = new RegExp(`${tok.chapter}\\s*[:장]`).test(text);
+    if (!chapterHit) return 0;
+    return text.includes(tok.book) ? 2 : 1;
+  }
+
+  function detectPassageDate(text, fallbackDate){
+    let best = null, bestScore = 0, bestDist = Infinity;
+    Object.keys(state.readings).forEach(d=>{
+      const score = readingMatchScore(text, state.readings[d]);
+      if (score === 0) return;
+      const dist = Math.abs(new Date(d) - new Date(fallbackDate));
+      if (score > bestScore || (score === bestScore && dist < bestDist)){
+        best = d; bestScore = score; bestDist = dist;
+      }
+    });
+    return best;
+  }
+
+  function resolveMessageDate(text, fallbackDate){
+    return detectExplicitDate(text, fallbackDate) || detectPassageDate(text, fallbackDate) || fallbackDate;
+  }
+
+  /* 카톡 내보내기에서 사진은 "사진", "사진 3장" 같은 안내 문구로 대체됨.
+     이모티콘·동영상은 QT 인증과 무관하게 흔히 쓰여 오탐 위험이 커서 제외. */
+  function isPhotoMessage(text){
+    return /^사진(\s*\d+\s*장)?$/.test(text.trim());
+  }
+
+  function analyze(dateStr){
+    const allMessages = parseChat(state.lastChatText || '');
+    const dayMessages = allMessages.filter(m => resolveMessageDate(m.text, m.date) === dateStr);
+    const readingTok = readingTokens(state.readings[dateStr]);
+
+    const bySender = {};
+    dayMessages.forEach(m=>{
+      if (state.excluded.includes(m.sender)) return;
+      (bySender[m.sender] = bySender[m.sender] || []).push(m.text);
+    });
+    const todaySenders = Object.keys(bySender);
+
+    const doneByReal = {};
+    const unmapped = [];
+    todaySenders.forEach(sender=>{
+      const msgs = bySender[sender];
+      const qualifying = msgs.filter(t => t.trim().length <= state.settings.noticeMax);
+      const photoOk = !state.photoExcluded.includes(sender);
+      const done = qualifying.some(t =>
+        t.trim().length >= state.settings.threshold ||
+        mentionsReading(t, readingTok) ||
+        (photoOk && isPhotoMessage(t))
+      );
+      const real = state.mapping[sender];
+      if (!real){ unmapped.push(sender); return; }
+      doneByReal[real] = !!doneByReal[real] || done;
+    });
+
+    state.records[dateStr] = state.records[dateStr] || {};
+    state.roster.forEach(r => { state.records[dateStr][r.name] = !!doneByReal[r.name]; });
+    saveRecords();
+
+    const rows = state.roster.map(r=>{
+      const s = getStats(r.name, dateStr);
+      return { name: r.name, done: !!doneByReal[r.name], rate: s.rate, streak: s.streak };
+    });
+
+    state.lastResults = { dateStr, rows, unmapped, todaySenders, noCandidates: todaySenders.length === 0 };
+    return state.lastResults;
+  }
+
+  /* ---------------- 집계 탭 렌더 ---------------- */
+  const aggDateInput = document.getElementById('aggDate');
+  const chatInput = document.getElementById('chatInput');
+  const chatFile = document.getElementById('chatFile');
+
+  aggDateInput.value = yesterdayStr();
+  chatInput.value = state.lastChatText;
+
+  chatFile.addEventListener('change', ()=>{
+    const file = chatFile.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = e => { chatInput.value = e.target.result; };
+    reader.readAsText(file, 'utf-8');
+  });
+
+  document.getElementById('btnAnalyze').addEventListener('click', ()=>{
+    state.lastChatText = chatInput.value;
+    localStorage.setItem(LS.lastChat, state.lastChatText);
+    const dateStr = aggDateInput.value || yesterdayStr();
+    const result = analyze(dateStr);
+    renderAggWarnings(result);
+    renderResultTable(result);
+    renderExportPreview();
+  });
+
+  function renderAggWarnings(result){
+    const el = document.getElementById('aggWarnings');
+    el.innerHTML = '';
+    if (result.noCandidates){
+      el.innerHTML += `<div class="banner banner-warning"><b>후보 없음</b> — 선택한 날짜(${result.dateStr})에 감지된 메시지가 없습니다. 날짜나 붙여넣은 대화 범위, 대화 형식을 확인하세요.</div>`;
+    }
+    if (result.unmapped.length){
+      const chips = result.unmapped.map(n=>`<span class="chip">${escapeHtml(n)}</span>`).join('');
+      el.innerHTML += `<div class="banner banner-warning"><b>미매핑 이름 ${result.unmapped.length}건</b> — 아래 표시 이름이 명단에 연결되지 않아 집계에서 제외되었습니다. 「매핑」 탭에서 연결하세요.<div>${chips}</div></div>`;
+    }
+  }
+
+  function renderResultTable(result){
+    const card = document.getElementById('resultCard');
+    const tbody = document.getElementById('resultTbody');
+    if (!state.roster.length){
+      card.style.display = 'none';
+      return;
+    }
+    card.style.display = '';
+    tbody.innerHTML = result.rows.map(r => `
+      <tr>
+        <td>${escapeHtml(r.name)}</td>
+        <td class="center"><span class="badge ${r.done ? 'badge-done' : 'badge-undone'}">${r.done ? 'O' : 'X'}</span></td>
+        <td class="center">${r.rate}%</td>
+        <td class="center">${r.streak}일</td>
+      </tr>
+    `).join('');
+  }
+
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  /* ---------------- 매핑 탭 렌더 ---------------- */
+  function renderMapping(){
+    const el = document.getElementById('mappingList');
+    if (!state.lastResults || !state.lastResults.todaySenders.length){
+      el.innerHTML = '<p class="empty">먼저 「집계」 탭에서 분석을 실행하면 발신자 목록이 표시됩니다.</p>';
+      return;
+    }
+    if (!state.roster.length){
+      el.innerHTML = '<p class="empty">「명단·설정」 탭에서 명단을 먼저 등록하세요.</p>';
+      return;
+    }
+    el.innerHTML = state.lastResults.todaySenders.map(sender=>{
+      const current = state.mapping[sender] || '';
+      const options = ['<option value="">연결 안 함</option>']
+        .concat(state.roster.map(r => `<option value="${escapeHtml(r.name)}" ${r.name===current?'selected':''}>${escapeHtml(r.name)}</option>`))
+        .join('');
+      return `
+        <div class="list-item">
+          <span class="name">${escapeHtml(sender)}</span>
+          <select data-sender="${escapeHtml(sender)}">${options}</select>
+        </div>`;
+    }).join('');
+
+    el.querySelectorAll('select').forEach(sel=>{
+      sel.addEventListener('change', ()=>{
+        const sender = sel.dataset.sender;
+        if (sel.value) state.mapping[sender] = sel.value;
+        else delete state.mapping[sender];
+        saveMapping();
+        const result = analyze(state.lastResults.dateStr);
+        renderAggWarnings(result);
+        renderResultTable(result);
+        renderExportPreview();
+      });
+    });
+  }
+
+  /* ---------------- 명단·설정 탭 ---------------- */
+  function renderRoster(){
+    const el = document.getElementById('rosterList');
+    el.innerHTML = state.roster.length
+      ? state.roster.map((r,i)=>`
+          <div class="roster-item">
+            <div class="roster-item-top">
+              <span class="name">${escapeHtml(r.name)}</span>
+              <button class="btn btn-icon-del" data-i="${i}" aria-label="삭제">×</button>
+            </div>
+            <div class="roster-item-fields">
+              <input type="text" class="roster-alias" data-i="${i}" placeholder="닉네임(쉼표로 여러 개)" value="${escapeHtml((r.aliases||[]).join(', '))}">
+              <input type="text" class="roster-note" data-i="${i}" placeholder="비고" value="${escapeHtml(r.note||'')}">
+            </div>
+          </div>`).join('')
+      : '<p class="empty">등록된 명단이 없습니다.</p>';
+    el.querySelectorAll('button[data-i]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        state.roster.splice(+btn.dataset.i, 1);
+        saveRoster();
+        renderRoster();
+        renderExportPreview();
+      });
+    });
+    el.querySelectorAll('input.roster-note').forEach(input=>{
+      input.addEventListener('input', ()=>{
+        state.roster[+input.dataset.i].note = input.value;
+        saveRoster();
+        renderExportPreview();
+      });
+    });
+    el.querySelectorAll('input.roster-alias').forEach(input=>{
+      input.addEventListener('change', ()=>{
+        const r = state.roster[+input.dataset.i];
+        const prevAliases = r.aliases || [];
+        const newAliases = input.value.split(',').map(s=>s.trim()).filter(Boolean);
+        prevAliases.forEach(a=>{ if (!newAliases.includes(a) && state.mapping[a] === r.name) delete state.mapping[a]; });
+        newAliases.forEach(a=>{ state.mapping[a] = r.name; });
+        r.aliases = newAliases;
+        saveRoster();
+        saveMapping();
+      });
+    });
+  }
+
+  function renderExcluded(){
+    const el = document.getElementById('excludedList');
+    el.innerHTML = state.excluded.length
+      ? state.excluded.map((n,i)=>`
+          <div class="list-item">
+            <span class="name">${escapeHtml(n)}</span>
+            <button class="btn btn-icon-del" data-i="${i}" aria-label="삭제">×</button>
+          </div>`).join('')
+      : '<p class="empty">제외 이름이 없습니다.</p>';
+    el.querySelectorAll('button[data-i]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        state.excluded.splice(+btn.dataset.i, 1);
+        saveExcluded();
+        renderExcluded();
+      });
+    });
+  }
+
+  function renderPhotoExcluded(){
+    const el = document.getElementById('photoExcludedList');
+    el.innerHTML = state.photoExcluded.length
+      ? state.photoExcluded.map((n,i)=>`
+          <div class="list-item">
+            <span class="name">${escapeHtml(n)}</span>
+            <button class="btn btn-icon-del" data-i="${i}" aria-label="삭제">×</button>
+          </div>`).join('')
+      : '<p class="empty">제외한 이름이 없습니다.</p>';
+    el.querySelectorAll('button[data-i]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        state.photoExcluded.splice(+btn.dataset.i, 1);
+        savePhotoExcluded();
+        renderPhotoExcluded();
+      });
+    });
+  }
+
+  document.getElementById('btnAddRoster').addEventListener('click', ()=>{
+    const input = document.getElementById('rosterInput');
+    const v = input.value.trim();
+    if (!v || state.roster.some(r => r.name === v)) { input.value=''; return; }
+    state.roster.push({ name: v, note: '', aliases: [] });
+    saveRoster();
+    input.value = '';
+    renderRoster();
+    renderExportPreview();
+  });
+
+  document.getElementById('btnAddExcluded').addEventListener('click', ()=>{
+    const input = document.getElementById('excludedInput');
+    const v = input.value.trim();
+    if (!v || state.excluded.includes(v)) { input.value=''; return; }
+    state.excluded.push(v);
+    saveExcluded();
+    input.value = '';
+    renderExcluded();
+  });
+
+  document.getElementById('btnAddPhotoExcluded').addEventListener('click', ()=>{
+    const input = document.getElementById('photoExcludedInput');
+    const v = input.value.trim();
+    if (!v || state.photoExcluded.includes(v)) { input.value=''; return; }
+    state.photoExcluded.push(v);
+    savePhotoExcluded();
+    input.value = '';
+    renderPhotoExcluded();
+  });
+
+  const thresholdInput = document.getElementById('settingThreshold');
+  const noticeMaxInput = document.getElementById('settingNoticeMax');
+  const roomNameInput = document.getElementById('settingRoomName');
+  const readingInput = document.getElementById('settingReading');
+
+  thresholdInput.value = state.settings.threshold;
+  noticeMaxInput.value = state.settings.noticeMax;
+  roomNameInput.value = state.settings.roomName;
+  readingInput.value = state.readings[todayStr()] || '';
+
+  thresholdInput.addEventListener('change', ()=>{ state.settings.threshold = +thresholdInput.value || 20; saveSettings(); });
+  noticeMaxInput.addEventListener('change', ()=>{ state.settings.noticeMax = +noticeMaxInput.value || 200; saveSettings(); });
+  roomNameInput.addEventListener('input', ()=>{ state.settings.roomName = roomNameInput.value; saveSettings(); renderExportPreview(); });
+  readingInput.addEventListener('input', ()=>{
+    state.readings[todayStr()] = readingInput.value;
+    saveReadings();
+  });
+
+  /* ---------------- 오늘 묵상 본문 자동 가져오기 ---------------- */
+  const READING_SOURCE_URL = 'https://sum.su.or.kr:8888/bible/today';
+  const READING_PROXY_URL = 'https://r.jina.ai/' + READING_SOURCE_URL;
+
+  function parseReadingText(text){
+    const m = /본문\s*[:：]\s*([가-힣]+)\s*(?:\([^)]*\))?\s*(\d+\s*:\s*\d+(?:\s*-\s*\d+\s*:\s*\d+)?)\s*찬송가/.exec(text);
+    if (!m) return null;
+    return `${m[1]} ${m[2].replace(/\s+/g, '')}`;
+  }
+
+  async function fetchReading(){
+    const statusEl = document.getElementById('readingFetchStatus');
+    const btn = document.getElementById('btnFetchReading');
+    btn.disabled = true;
+    statusEl.innerHTML = '<div class="banner banner-info">가져오는 중...</div>';
+    try{
+      const res = await fetch(READING_PROXY_URL);
+      if (!res.ok) throw new Error('network');
+      const text = await res.text();
+      const reading = parseReadingText(text);
+      if (!reading) throw new Error('parse');
+      state.readings[todayStr()] = reading;
+      saveReadings();
+      readingInput.value = reading;
+      statusEl.innerHTML = `<div class="banner banner-info">가져옴: <b>${escapeHtml(reading)}</b></div>`;
+    } catch(e){
+      statusEl.innerHTML = '<div class="banner banner-warning">자동 가져오기에 실패했습니다. 링크에서 확인 후 직접 입력해주세요: <a href="' + READING_SOURCE_URL + '" target="_blank" rel="noopener">매일성경 열기</a></div>';
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  document.getElementById('btnFetchReading').addEventListener('click', fetchReading);
+
+  /* ---------------- 날짜별 본문 수정 ---------------- */
+  const readingEditDate = document.getElementById('readingEditDate');
+  const readingEditText = document.getElementById('readingEditText');
+
+  readingEditDate.value = todayStr();
+  readingEditText.value = state.readings[readingEditDate.value] || '';
+
+  readingEditDate.addEventListener('change', ()=>{
+    if (!readingEditDate.value) readingEditDate.value = todayStr();
+    readingEditText.value = state.readings[readingEditDate.value] || '';
+  });
+
+  document.getElementById('btnSaveReadingEdit').addEventListener('click', ()=>{
+    const d = readingEditDate.value || todayStr();
+    const v = readingEditText.value.trim();
+    if (v) state.readings[d] = v; else delete state.readings[d];
+    saveReadings();
+    if (d === todayStr()) readingInput.value = v;
+  });
+
+  /* ---------------- 내보내기 탭 (월간 나눔표) ---------------- */
+  const exportMonthInput = document.getElementById('exportMonth');
+  exportMonthInput.value = todayStr().slice(0, 7);
+  exportMonthInput.addEventListener('change', renderExportPreview);
+
+  function getMonthDayCount(ym){
+    const [y, m] = ym.split('-').map(Number);
+    return new Date(y, m, 0).getDate();
+  }
+
+  function sortedRosterKorean(){
+    const collator = new Intl.Collator('ko');
+    return [...state.roster].sort((a,b)=> collator.compare(a.name, b.name));
+  }
+
+  function bandClass(i, total){
+    const chunk = Math.max(1, Math.ceil(total / 4));
+    return 'band-' + Math.min(3, Math.floor(i / chunk));
+  }
+
+  function renderExportPreview(){
+    const emptyCard = document.getElementById('exportEmptyCard');
+    const wrap = document.getElementById('exportPreviewWrap');
+    const actions = document.getElementById('exportActions');
+
+    if (!state.roster.length){
+      emptyCard.style.display = '';
+      wrap.style.display = 'none';
+      actions.style.display = 'none';
+      return;
+    }
+    emptyCard.style.display = 'none';
+    wrap.style.display = '';
+    actions.style.display = '';
+
+    const ym = exportMonthInput.value || todayStr().slice(0, 7);
+    const [y, m] = ym.split('-').map(Number);
+    const dayCount = getMonthDayCount(ym);
+    const roster = sortedRosterKorean();
+    const orgLabel = state.settings.roomName ? state.settings.roomName + ' ' : '';
+
+    document.getElementById('epTitle').textContent = `${y}년 ${orgLabel}${m}월 묵상 나눔표`;
+
+    document.getElementById('epHeadRow1').innerHTML =
+      `<th rowspan="2">이름</th><th colspan="${dayCount}">${y}년 ${m}월</th><th rowspan="2">비고</th>`;
+    document.getElementById('epHeadRow2').innerHTML =
+      Array.from({length: dayCount}, (_,i)=>`<th>${i+1}</th>`).join('');
+
+    document.getElementById('epTbody').innerHTML = roster.map((r,i)=>{
+      const band = bandClass(i, roster.length);
+      const days = Array.from({length: dayCount}, (_,d)=>{
+        const dateStr = toDateStr(y, m, d+1);
+        const rec = state.records[dateStr];
+        const mark = rec ? (rec[r.name] ? 'O' : '-') : '';
+        return `<td class="ep-day">${mark}</td>`;
+      }).join('');
+      return `<tr class="${band}"><td class="ep-name">${escapeHtml(r.name)}</td>${days}<td class="ep-note">${escapeHtml(r.note || '')}</td></tr>`;
+    }).join('');
+  }
+
+  document.getElementById('btnExportPdf').addEventListener('click', ()=>{
+    const el = document.getElementById('exportPreview');
+    const ym = exportMonthInput.value || todayStr().slice(0, 7);
+    html2pdf().set({
+      margin: 10,
+      filename: `QT나눔표_${ym}.pdf`,
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { scale: 2, backgroundColor: '#ffffff' },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
+    }).from(el).save();
+  });
+
+  document.getElementById('btnExportPng').addEventListener('click', ()=>{
+    const el = document.getElementById('exportPreview');
+    const ym = exportMonthInput.value || todayStr().slice(0, 7);
+    html2canvas(el, { scale: 2, backgroundColor: '#ffffff' }).then(canvas=>{
+      const link = document.createElement('a');
+      link.download = `QT나눔표_${ym}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    });
+  });
+
+  document.getElementById('btnExportCsv').addEventListener('click', ()=>{
+    if (!state.roster.length) return;
+    const ym = exportMonthInput.value || todayStr().slice(0, 7);
+    const [y, m] = ym.split('-').map(Number);
+    const dayCount = getMonthDayCount(ym);
+    const roster = sortedRosterKorean();
+    let csv = '이름,' + Array.from({length: dayCount}, (_,i)=>`${i+1}일`).join(',') + ',비고\n';
+    roster.forEach(r=>{
+      const days = Array.from({length: dayCount}, (_,d)=>{
+        const dateStr = toDateStr(y, m, d+1);
+        const rec = state.records[dateStr];
+        return rec ? (rec[r.name] ? 'O' : '-') : '';
+      }).join(',');
+      csv += `${r.name},${days},${r.note || ''}\n`;
+    });
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `QT나눔표_${ym}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  /* ---------------- 초기화 ---------------- */
+  function init(){
+    const now = new Date();
+    document.getElementById('topbarDate').textContent =
+      `${now.getMonth()+1}/${now.getDate()} (${weekdayKor(todayStr())})`;
+    renderRoster();
+    renderExcluded();
+    renderPhotoExcluded();
+    renderExportPreview();
+    if (!state.readings[todayStr()]) fetchReading();
+  }
+  init();
+
+})();
+</script>
+</body>
+</html>
