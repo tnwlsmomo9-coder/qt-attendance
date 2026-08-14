@@ -173,7 +173,7 @@
   .roster-item{ padding:10px 0; border-bottom:1px solid var(--color-divider-soft); }
   .roster-item:last-child{ border-bottom:none; }
   .roster-item-top{ display:flex; align-items:center; justify-content:space-between; gap:var(--space-sm); }
-  .roster-item-top .name{ font-size:15px; font-weight:600; }
+  .roster-item-top input.roster-name{ flex:1; font-size:15px; font-weight:600; padding:8px 10px; }
   .roster-item-fields{ display:flex; gap:8px; margin-top:8px; }
   .roster-item-fields input{ flex:1; font-size:13px; padding:8px 10px; }
 
@@ -285,7 +285,7 @@
     <section class="panel" id="panel-mapping">
       <div class="card">
         <h2>발신자 매핑</h2>
-        <p class="hint">최근 분석에서 발견된 표시 이름을 명단의 실명에 연결하세요. 한 번 연결하면 다음부터 자동으로 매칭됩니다. (닉네임을 미리 알고 있다면 「명단·설정」 탭에서 등록해도 됩니다.)</p>
+        <p class="hint">최근 분석에서 발견된 표시 이름을 명단의 실명에 연결하세요. 한 번 연결하면 다음부터 자동으로 매칭됩니다.</p>
         <div id="mappingList"></div>
       </div>
     </section>
@@ -294,7 +294,7 @@
     <section class="panel" id="panel-settings">
       <div class="card">
         <h2>명단</h2>
-        <p class="hint">여부 표에 표시될 실명 목록입니다. 대화방 닉네임이 실명과 다르면 닉네임을 미리 등록해두세요 — 쉼표로 여러 개 등록 가능하며, 분석 시 자동으로 매핑됩니다.</p>
+        <p class="hint">여부 표에 표시될 실명 목록입니다. 이름을 클릭해 바로 수정할 수 있습니다 — 수정하면 매핑·기록도 함께 옮겨집니다.</p>
         <div id="rosterList"></div>
         <div class="row" style="margin-top:var(--space-sm);">
           <input type="text" id="rosterInput" placeholder="이름 추가">
@@ -424,8 +424,8 @@
 
   const state = {
     roster: load(LS.roster, []).map(r => typeof r === 'string'
-      ? { name: r, note: '', aliases: [] }
-      : { name: r.name, note: r.note || '', aliases: r.aliases || [] }),
+      ? { name: r, note: '' }
+      : { name: r.name, note: r.note || '' }),
     mapping: load(LS.mapping, {}),
     excluded: load(LS.excluded, []),
     photoExcluded: load(LS.photoExcluded, []),
@@ -727,17 +727,40 @@
   }
 
   /* ---------------- 명단·설정 탭 ---------------- */
+  function renameRosterMember(i, newName){
+    const r = state.roster[i];
+    const oldName = r.name;
+    newName = newName.trim();
+    if (!newName || newName === oldName) return false;
+    if (state.roster.some((x,j)=> j!==i && x.name === newName)){
+      alert('이미 등록된 이름입니다.');
+      return false;
+    }
+    r.name = newName;
+    Object.keys(state.mapping).forEach(k=>{ if (state.mapping[k] === oldName) state.mapping[k] = newName; });
+    Object.keys(state.records).forEach(d=>{
+      const rec = state.records[d];
+      if (Object.prototype.hasOwnProperty.call(rec, oldName)){
+        rec[newName] = rec[oldName];
+        delete rec[oldName];
+      }
+    });
+    saveRoster();
+    saveMapping();
+    saveRecords();
+    return true;
+  }
+
   function renderRoster(){
     const el = document.getElementById('rosterList');
     el.innerHTML = state.roster.length
       ? state.roster.map((r,i)=>`
           <div class="roster-item">
             <div class="roster-item-top">
-              <span class="name">${escapeHtml(r.name)}</span>
+              <input type="text" class="roster-name" data-i="${i}" value="${escapeHtml(r.name)}">
               <button class="btn btn-icon-del" data-i="${i}" aria-label="삭제">×</button>
             </div>
             <div class="roster-item-fields">
-              <input type="text" class="roster-alias" data-i="${i}" placeholder="닉네임(쉼표로 여러 개)" value="${escapeHtml((r.aliases||[]).join(', '))}">
               <input type="text" class="roster-note" data-i="${i}" placeholder="비고" value="${escapeHtml(r.note||'')}">
             </div>
           </div>`).join('')
@@ -757,16 +780,12 @@
         renderExportPreview();
       });
     });
-    el.querySelectorAll('input.roster-alias').forEach(input=>{
+    el.querySelectorAll('input.roster-name').forEach(input=>{
       input.addEventListener('change', ()=>{
-        const r = state.roster[+input.dataset.i];
-        const prevAliases = r.aliases || [];
-        const newAliases = input.value.split(',').map(s=>s.trim()).filter(Boolean);
-        prevAliases.forEach(a=>{ if (!newAliases.includes(a) && state.mapping[a] === r.name) delete state.mapping[a]; });
-        newAliases.forEach(a=>{ state.mapping[a] = r.name; });
-        r.aliases = newAliases;
-        saveRoster();
-        saveMapping();
+        const i = +input.dataset.i;
+        const ok = renameRosterMember(i, input.value);
+        input.value = state.roster[i].name;
+        if (ok) { renderMapping(); renderExportPreview(); }
       });
     });
   }
@@ -811,7 +830,7 @@
     const input = document.getElementById('rosterInput');
     const v = input.value.trim();
     if (!v || state.roster.some(r => r.name === v)) { input.value=''; return; }
-    state.roster.push({ name: v, note: '', aliases: [] });
+    state.roster.push({ name: v, note: '' });
     saveRoster();
     input.value = '';
     renderRoster();
