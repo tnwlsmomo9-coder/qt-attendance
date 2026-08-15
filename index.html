@@ -1,35 +1,49 @@
-2<!doctype html>
+<!doctype html>
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-<title>QT 인증 도우미</title>
+<title>신천중부교회 QT인증 집계</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/Flip.min.js"></script>
 <style>
   :root{
-    /* --- DESIGN.md 기반 토큰 (유틸리티 앱 스케일로 축소 적용) --- */
-    --color-primary: #0066cc;
-    --color-primary-focus: #0071e3;
-    --color-ink: #1d1d1f;
-    --color-ink-muted-80: #333333;
-    --color-ink-muted-48: #7a7a7a;
+    /* --- "세이지 & 테라코타" 컬러 팔레트: 따뜻하고 차분한 흙톤 두 가지 색으로 통일
+       (Sage=구조/브랜드 기본, Terracotta=강조/행동 유도) --- */
+    --color-primary: #5B7B5A;       /* Sage — 기본/구조 */
+    --color-primary-dark: #46614A;
+    --color-primary-focus: #7C9B7A;
+    --color-primary-tint: #E8EFE6;
+
+    --color-accent: #C1613C;        /* Terracotta — 강조/행동(CTA) */
+    --color-accent-dark: #A34F30;
+    --color-accent-tint: #FBEAE1;
+
+    --color-gold: #A6741E;          /* 흙톤 계열 서브 포인트(경고/뱃지 다양화용) */
+    --color-gold-tint: #FBF0DC;
+
+    --color-ink: #2B2B2B;
+    --color-ink-muted-80: #4A4440;
+    --color-ink-muted-48: #8A8078;
     --color-canvas: #ffffff;
-    --color-canvas-parchment: #f5f5f7;
-    --color-surface-pearl: #fafafc;
-    --color-hairline: #e0e0e0;
-    --color-divider-soft: #f0f0f0;
+    --color-canvas-parchment: #FBF7F0;
+    --color-surface-pearl: #FDFBF7;
+    --color-hairline: #E8E0D5;
+    --color-divider-soft: #F2ECE3;
     --color-surface-black: #000000;
     --color-on-dark: #ffffff;
 
-    /* --- DESIGN.md에 없는 확장 토큰: PRD가 요구하는 완료/미완료 상태색 --- */
-    --color-success: #1a9c4c;
-    --color-success-bg: #e8f7ee;
-    --color-danger: #d92d20;
-    --color-danger-bg: #fdecea;
-    --color-warning: #a15c07;
-    --color-warning-bg: #fdf3e0;
+    /* --- 완료/미완료 등 상태색: 팔레트와 어울리는 차분한 톤 --- */
+    --color-success: #4A7A4A;
+    --color-success-bg: #E7F1E7;
+    --color-danger: #B3401E;
+    --color-danger-bg: #F8E3DC;
+    --color-warning: #A6741E;
+    --color-warning-bg: #FBF0DC;
 
     --radius-sm: 8px;
     --radius-md: 11px;
@@ -57,11 +71,14 @@
     -webkit-font-smoothing:antialiased;
   }
 
-  .app{ max-width:720px; margin:0 auto; min-height:100vh; background:var(--color-canvas-parchment); }
+  .app{ min-height:100vh; background:var(--color-canvas-parchment); }
+  /* 실제 업무용 UI(탭/폼)는 큰 화면에서도 읽기 좋은 폭으로 고정하되,
+     랜딩 화면은 .app의 자식이라도 이 폭 제한 밖으로 풀 배경을 채움 */
+  #appShell{ max-width:720px; margin:0 auto; }
 
-  /* Top bar (global-nav 모티프: 검정, 얇은 높이) */
+  /* Top bar: 짙은 세이지그린 */
   .topbar{
-    background:var(--color-surface-black);
+    background:linear-gradient(135deg, var(--color-primary-dark) 0%, var(--color-primary) 100%);
     color:var(--color-on-dark);
     height:52px;
     display:flex; align-items:center; justify-content:space-between;
@@ -69,12 +86,12 @@
     position:sticky; top:0; z-index:20;
   }
   .topbar h1{ font-size:15px; font-weight:600; letter-spacing:-0.12px; margin:0; }
-  .topbar .today{ font-size:12px; color:#cccccc; font-weight:400; }
+  .topbar .today{ font-size:12px; color:rgba(255,255,255,0.85); font-weight:400; }
 
-  /* Tab bar (sub-nav-frosted 모티프) */
+  /* Tab bar: 세이지(집계·명단설정)와 테라코타(매핑·내보내기)를 번갈아 배정 */
   .tabbar{
     display:flex;
-    background:rgba(245,245,247,0.92);
+    background:rgba(251,247,240,0.92);
     backdrop-filter:saturate(180%) blur(20px);
     -webkit-backdrop-filter:saturate(180%) blur(20px);
     position:sticky; top:52px; z-index:19;
@@ -87,22 +104,31 @@
     font-size:13px; font-weight:600; letter-spacing:-0.12px;
     color:var(--color-ink-muted-48);
     padding:14px 4px 12px;
-    border-bottom:2px solid transparent;
+    border-bottom:3px solid transparent;
   }
-  .tab-btn.active{ color:var(--color-primary); border-bottom-color:var(--color-primary); }
+  .tab-btn:nth-of-type(1).active, .tab-btn:nth-of-type(3).active{ color:var(--color-primary); border-bottom-color:var(--color-primary); }
+  .tab-btn:nth-of-type(2).active, .tab-btn:nth-of-type(4).active{ color:var(--color-accent); border-bottom-color:var(--color-accent); }
 
   main{ padding:var(--space-lg) var(--space-lg) 80px; }
   .panel{ display:none; }
   .panel.active{ display:block; }
 
   .card{
+    --tab-accent: var(--color-primary);
     background:var(--color-canvas);
     border:1px solid var(--color-hairline);
+    border-top:4px solid var(--tab-accent);
     border-radius:var(--radius-lg);
     padding:var(--space-lg);
     margin-bottom:var(--space-lg);
+    box-shadow:0 4px 16px rgba(91,123,90,0.08);
   }
-  .card h2{ font-size:17px; font-weight:600; letter-spacing:-0.374px; margin:0 0 var(--space-sm); }
+  body[data-tab="mapping"] .card, body[data-tab="export"] .card{ --tab-accent: var(--color-accent); box-shadow:0 4px 16px rgba(193,97,60,0.08); }
+  .card h2{ font-size:17px; font-weight:700; letter-spacing:-0.374px; margin:0 0 var(--space-sm); }
+  .card h2::before{
+    content:''; display:inline-block; width:8px; height:8px; border-radius:50%;
+    background:var(--tab-accent); margin-right:8px; vertical-align:middle;
+  }
   .card .hint{ font-size:13px; color:var(--color-ink-muted-48); line-height:1.5; margin:-4px 0 var(--space-md); }
 
   label.field-label{ display:block; font-size:13px; font-weight:600; color:var(--color-ink-muted-80); margin-bottom:6px; }
@@ -131,7 +157,7 @@
     min-height:44px;
   }
   .btn-primary{
-    background:var(--color-primary); color:#fff;
+    background:var(--color-accent); color:#fff;
     font-size:15px; font-weight:400;
     border-radius:var(--radius-pill);
     padding:11px 22px;
@@ -146,14 +172,14 @@
   }
   .btn-secondary:active{ transform:scale(0.97); }
   .btn-utility{
-    background:var(--color-ink); color:#fff;
+    background:var(--color-primary-dark); color:#fff;
     font-size:13px; font-weight:400;
     border-radius:var(--radius-sm);
     padding:8px 14px; min-height:36px;
   }
   .btn-utility:active{ transform:scale(0.95); }
   .btn-icon-del{
-    background:var(--color-divider-soft); color:var(--color-ink-muted-80);
+    background:var(--color-danger-bg); color:var(--color-danger);
     border-radius:var(--radius-pill);
     width:28px; height:28px; min-height:28px; font-size:14px; line-height:1; padding:0;
   }
@@ -182,11 +208,15 @@
     background:var(--color-surface-pearl); border:1px solid var(--color-divider-soft);
     border-radius:var(--radius-md); padding:6px 10px; font-size:13px; margin:4px 6px 0 0;
   }
+  /* 미매핑 이름 칩: 이름별로 색이 도는 무지개 팔레트 (renderAggWarnings의 chipColor()가 부여) */
+  .chip.chip-0{ background:var(--color-primary-tint); border-color:transparent; color:var(--color-primary-dark); }
+  .chip.chip-1{ background:var(--color-accent-tint); border-color:transparent; color:var(--color-accent-dark); }
+  .chip.chip-2{ background:var(--color-gold-tint); border-color:transparent; color:var(--color-gold); }
 
   /* 경고 배너 */
   .banner{ border-radius:var(--radius-md); padding:var(--space-sm) var(--space-md); font-size:13px; line-height:1.5; margin-bottom:var(--space-md); }
   .banner-warning{ background:var(--color-warning-bg); color:var(--color-warning); }
-  .banner-info{ background:var(--color-divider-soft); color:var(--color-ink-muted-80); }
+  .banner-info{ background:var(--color-primary-tint); color:var(--color-primary-dark); }
   .banner b{ font-weight:600; }
 
   /* 결과 테이블 */
@@ -213,17 +243,93 @@
   #epTable th, #epTable td{
     border:1px solid #cfcfcf; padding:4px 3px; text-align:center;
   }
-  #epTable th{ background:#ffffff; font-weight:600; color:#333333; }
+  #epTable th{ background:#E8EFE6; font-weight:600; color:#333333; }
   #epTable td.ep-name{ text-align:left; padding-left:8px; min-width:64px; font-weight:400; }
   #epTable td.ep-note{ text-align:left; padding-left:8px; min-width:70px; }
-  #epTable td.ep-day{ min-width:20px; color:#d92d20; font-weight:600; cursor:pointer; }
-  #epTable td.ep-day:hover{ outline:1px solid #0066cc; outline-offset:-1px; }
-  #epTable .band-0{ background:#f4e9f8; }
-  #epTable .band-1{ background:#fdf6d8; }
-  #epTable .band-2{ background:#e3f5ea; }
-  #epTable .band-3{ background:#fdeadb; }
+  #epTable td.ep-day{ min-width:20px; color:#B3401E; font-weight:600; cursor:pointer; }
+  #epTable td.ep-day:hover{ outline:1px solid #5B7B5A; outline-offset:-1px; }
+  #epTable .band-0{ background:#E8EFE6; }
+  #epTable .band-1{ background:#FBEAE1; }
+  #epTable .band-2{ background:#FBF0DC; }
+  #epTable .band-3{ background:#F0E6D8; }
 
   .section-gap{ height:var(--space-xl); }
+
+  /* 랜딩 화면 (앱을 열 때마다 가장 먼저 보이는 소개 화면).
+     .app 폭 제한 밖에 있어 화면 크기와 무관하게 항상 뷰포트 전체를 채움 */
+  .landing{ width:100%; background:var(--color-canvas-parchment); cursor:pointer; }
+
+  /* Bento 갤러리 히어로: 스크롤하면 GSAP Flip+ScrollTrigger로 격자 사진이 화면 전체로 확대 전환됨 */
+  .gallery-wrap{
+    position:relative; width:100%; height:100vh;
+    display:flex; align-items:center; justify-content:center; overflow:hidden;
+    background:linear-gradient(160deg, #46614A 0%, #5B7B5A 45%, #C1613C 100%);
+  }
+  .gallery{ position:relative; width:100%; height:100%; flex:none; }
+  .gallery__item{
+    background-position:50% 50%; background-size:cover; flex:none; position:relative;
+    border-radius:12px; overflow:hidden;
+  }
+  .gallery__item img{ object-fit:cover; width:100%; height:100%; display:block; }
+
+  .gallery--bento{
+    display:grid; gap:1vh;
+    grid-template-columns:repeat(3, 32.5vw);
+    grid-template-rows:repeat(4, 23vh);
+    justify-content:center; align-content:center;
+  }
+  .gallery--final.gallery--bento{
+    grid-template-columns:repeat(3, 100vw);
+    grid-template-rows:repeat(4, 49.5vh);
+    gap:1vh;
+  }
+  .gallery--bento .gallery__item:nth-child(1){ grid-area:1 / 1 / 3 / 2; }
+  .gallery--bento .gallery__item:nth-child(2){ grid-area:1 / 2 / 2 / 3; }
+  .gallery--bento .gallery__item:nth-child(3){ grid-area:2 / 2 / 4 / 3; }
+  .gallery--bento .gallery__item:nth-child(4){ grid-area:1 / 3 / 3 / 3; }
+  .gallery--bento .gallery__item:nth-child(5){ grid-area:3 / 1 / 3 / 2; }
+  .gallery--bento .gallery__item:nth-child(6){ grid-area:3 / 3 / 5 / 4; }
+  .gallery--bento .gallery__item:nth-child(7){ grid-area:4 / 1 / 5 / 2; }
+  .gallery--bento .gallery__item:nth-child(8){ grid-area:4 / 2 / 5 / 3; }
+
+  /* 실제 사진 준비 전 임시 플레이스홀더 타일(세이지·테라코타·골드 톤 그라디언트) — <img>로 교체 예정 */
+  .gallery__ph{ background:linear-gradient(135deg, var(--color-primary), var(--color-primary-dark)); }
+  .gallery__ph-2, .gallery__ph-5{ background:linear-gradient(135deg, var(--color-accent), var(--color-accent-dark)); }
+  .gallery__ph-3, .gallery__ph-7{ background:linear-gradient(135deg, var(--color-gold), #8A5C17); }
+  .gallery__ph-4, .gallery__ph-8{ background:linear-gradient(135deg, var(--color-primary-dark), var(--color-accent-dark)); }
+  .gallery__ph-6{ background:linear-gradient(135deg, var(--color-accent-dark), var(--color-gold)); }
+
+  /* 갤러리 아래: 실제 소개 문구 + 시작하기 버튼 */
+  .landing-content{ max-width:420px; margin:0 auto; text-align:center; padding:56px var(--space-lg) 64px; }
+  .landing-eyebrow{ font-size:13px; font-weight:700; color:var(--color-accent); margin:0 0 4px; }
+  .landing-title{ font-size:24px; font-weight:700; letter-spacing:-0.4px; color:var(--color-ink); margin:0 0 var(--space-sm); }
+  .landing-desc{ font-size:14px; line-height:1.6; color:var(--color-ink-muted-80); margin:0 0 var(--space-md); }
+  .landing-list{ text-align:left; font-size:13px; line-height:1.8; color:var(--color-ink-muted-80); margin:0 0 var(--space-lg); padding-left:0; list-style:none; }
+  .landing-list li{ position:relative; padding-left:22px; }
+  .landing-list li::before{
+    content:''; position:absolute; left:4px; top:8px; width:8px; height:8px; border-radius:50%;
+  }
+  .landing-list li:nth-child(1)::before{ background:var(--color-primary); }
+  .landing-list li:nth-child(2)::before{ background:var(--color-accent); }
+  .landing-list li:nth-child(3)::before{ background:var(--color-gold); }
+  .landing-note{ font-size:12px; color:var(--color-ink-muted-48); margin:var(--space-sm) 0 0; }
+
+  /* 반응형 브레이크포인트: 모바일(375, 기본값) · 태블릿(768) · 데스크톱(1180) */
+  @media (min-width:768px){
+    .landing-content{ max-width:560px; padding:64px var(--space-xl) 72px; }
+    .landing-eyebrow{ font-size:14px; }
+    .landing-title{ font-size:30px; }
+    .landing-desc{ font-size:15px; }
+    .landing-list{ font-size:14px; }
+  }
+  @media (min-width:1180px){
+    .landing-content{ max-width:680px; padding:80px var(--space-xl) 88px; }
+    .landing-eyebrow{ font-size:15px; }
+    .landing-title{ font-size:36px; }
+    .landing-desc{ font-size:16px; }
+    .landing-list{ font-size:15px; line-height:2; }
+    .landing-note{ font-size:13px; }
+  }
 
   @media (max-width:420px){
     main{ padding:var(--space-md); }
@@ -234,8 +340,37 @@
 <body>
 <div class="app">
 
+  <div class="landing" id="landingScreen">
+    <div class="gallery-wrap">
+      <div class="gallery gallery--bento gallery--switch" id="gallery-8">
+        <div class="gallery__item gallery__ph gallery__ph-1"></div>
+        <div class="gallery__item gallery__ph gallery__ph-2"></div>
+        <div class="gallery__item gallery__ph gallery__ph-3"></div>
+        <div class="gallery__item gallery__ph gallery__ph-4"></div>
+        <div class="gallery__item gallery__ph gallery__ph-5"></div>
+        <div class="gallery__item gallery__ph gallery__ph-6"></div>
+        <div class="gallery__item gallery__ph gallery__ph-7"></div>
+        <div class="gallery__item gallery__ph gallery__ph-8"></div>
+      </div>
+    </div>
+    <div class="landing-content">
+      <p class="landing-eyebrow">신천중부교회</p>
+      <h1 class="landing-title">QT인증 집계</h1>
+      <p class="landing-desc">카톡 큐티방 대화를 붙여넣으면 누가 언제 QT 인증을 했는지 자동으로 집계하고, 월간 나눔표를 만들어주는 도구입니다.</p>
+      <ul class="landing-list">
+        <li>대화를 붙여넣거나 파일(.txt/.csv)로 올리면 전체 기간을 한 번에 집계</li>
+        <li>대화방 표시 이름을 명단의 실명과 연결(매핑)</li>
+        <li>출석률·연속일수 계산, 월간 나눔표를 PDF·PNG·CSV로 내보내기</li>
+      </ul>
+      <button class="btn btn-primary btn-block" id="btnLandingStart">시작하기</button>
+      <p class="landing-note">대화 원문은 서버로 전송되지 않고 이 브라우저에만 저장됩니다.</p>
+    </div>
+  </div>
+
+  <div id="appShell" style="display:none;">
+
   <div class="topbar">
-    <h1>QT 인증 도우미</h1>
+    <h1>신천중부교회 QT인증 집계</h1>
     <span class="today" id="topbarDate"></span>
   </div>
 
@@ -252,9 +387,9 @@
     <section class="panel active" id="panel-aggregate">
       <div class="card">
         <h2>대화 붙여넣기</h2>
-        <p class="hint">카톡 대화방에서 '대화 내보내기'한 텍스트를 통째로 붙여넣으세요. 선택한 날짜치만 자동으로 골라 집계합니다. 카톡 원문은 서버로 전송되지 않고 이 브라우저에만 저장됩니다.</p>
+        <p class="hint">카톡 대화방에서 '대화 내보내기'한 텍스트를 통째로 붙여넣으세요. 대화에 포함된 모든 날짜를 한 번에 집계합니다. 카톡 원문은 서버로 전송되지 않고 이 브라우저에만 저장됩니다.</p>
         <div class="field">
-          <label class="field-label">집계 날짜</label>
+          <label class="field-label">결과 미리보기 날짜</label>
           <input type="date" id="aggDate">
         </div>
         <div class="field">
@@ -262,8 +397,8 @@
           <textarea id="chatInput" placeholder="여기에 카톡 대화 내용을 붙여넣으세요..."></textarea>
         </div>
         <div class="field">
-          <label class="field-label">또는 .txt 파일 업로드</label>
-          <input type="file" id="chatFile" accept=".txt">
+          <label class="field-label">또는 .txt/.csv 파일 업로드</label>
+          <input type="file" id="chatFile" accept=".txt,.csv">
         </div>
         <button class="btn btn-primary btn-block" id="btnAnalyze">분석</button>
       </div>
@@ -402,6 +537,8 @@
     </section>
 
   </main>
+  </div>
+
 </div>
 
 <script>
@@ -445,6 +582,17 @@
   function savePhotoExcluded(){ save(LS.photoExcluded, state.photoExcluded); }
   function saveSettings(){ save(LS.settings, state.settings); }
   function saveRecords(){ save(LS.records, state.records); }
+
+  /* 오늘 이후 날짜에는 인증 기록이 있을 수 없음(아직 안 지난 날). 과거 날짜 오인식 버그로
+     잘못 채워졌던 미래 날짜 기록이 남아있다면 여기서 정리 */
+  function cleanupFutureRecords(){
+    const today = todayStr();
+    let changed = false;
+    Object.keys(state.records).forEach(d=>{
+      if (d > today){ delete state.records[d]; changed = true; }
+    });
+    if (changed) saveRecords();
+  }
   function saveReadings(){ save(LS.readings, state.readings); }
 
   /* ---------------- 날짜 유틸 ---------------- */
@@ -465,11 +613,13 @@
   }
 
   /* ---------------- 탭 전환 ---------------- */
+  document.body.dataset.tab = 'aggregate';
   document.querySelectorAll('.tab-btn').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
       document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
       btn.classList.add('active');
+      document.body.dataset.tab = btn.dataset.tab;
       document.getElementById('panel-'+btn.dataset.tab).classList.add('active');
       if (btn.dataset.tab === 'mapping') renderMapping();
       if (btn.dataset.tab === 'export') renderExportPreview();
@@ -477,7 +627,54 @@
   });
 
   /* ---------------- 카톡 파싱 ---------------- */
+  /* 카카오톡 대화 내보내기는 .txt(줄글) 또는 .csv(Date,User,Message 표) 두 형식이 있어 둘 다 지원 */
   function parseChat(text){
+    const stripped = text.replace(/^﻿/, '');
+    if (/^\s*"?Date"?\s*,\s*"?User"?\s*,\s*"?Message"?/i.test(stripped)){
+      return parseChatCsv(stripped);
+    }
+    return parseChatTxt(stripped);
+  }
+
+  /* RFC4180 스타일 CSV 파서: 메시지 칸에 줄바꿈·쉼표·따옴표가 그대로 들어있어 줄 단위 split으로는 못 자름 */
+  function parseCsvRows(text){
+    const rows = [];
+    let row = [], field = '', inQuotes = false;
+    for (let i = 0; i < text.length; i++){
+      const c = text[i];
+      if (inQuotes){
+        if (c === '"'){
+          if (text[i+1] === '"'){ field += '"'; i++; } else { inQuotes = false; }
+        } else {
+          field += c;
+        }
+        continue;
+      }
+      if (c === '"'){ inQuotes = true; continue; }
+      if (c === ','){ row.push(field); field = ''; continue; }
+      if (c === '\r'){ continue; }
+      if (c === '\n'){ row.push(field); rows.push(row); row = []; field = ''; continue; }
+      field += c;
+    }
+    if (field.length || row.length){ row.push(field); rows.push(row); }
+    return rows;
+  }
+
+  function parseChatCsv(text){
+    const rows = parseCsvRows(text);
+    const messages = [];
+    rows.forEach((r, idx)=>{
+      if (idx === 0) return; // 헤더 행(Date,User,Message)
+      if (r.length < 3) return;
+      const dm = /^(\d{4})-(\d{2})-(\d{2})/.exec(r[0]);
+      const sender = (r[1] || '').trim();
+      if (!dm || !sender) return;
+      messages.push({ date: toDateStr(+dm[1], +dm[2], +dm[3]), sender, text: r.slice(2).join(',') });
+    });
+    return messages;
+  }
+
+  function parseChatTxt(text){
     const lines = text.split(/\r?\n/);
     const messages = [];
     let currentDate = null;
@@ -554,7 +751,10 @@
     return new RegExp(`${tokens.chapter}\\s*[:장]`).test(text);
   }
 
-  /* 메시지에 적힌 날짜(예: "8/13", "8월13일")를 실제 게시 시각 대신 우선 사용 */
+  /* 메시지에 적힌 날짜(예: "8/13", "8월13일")를 실제 게시 시각 대신 우선 사용.
+     단, 밀린 인증을 나중에 올리는 경우(과거 날짜 언급)만 대상으로 하고,
+     당일 올리면서 다음 날짜를 미리 적어둔 경우(미래 날짜 언급)까지 넘겨버리면
+     정작 올린 날짜는 미체크로 빠지므로, 게시 시각보다 미래인 날짜는 무시함 */
   function detectExplicitDate(text, fallbackDate){
     const year = fallbackDate.slice(0, 4);
     let m = /(\d{1,2})\s*월\s*(\d{1,2})\s*일/.exec(text);
@@ -562,7 +762,9 @@
     if (!m) return null;
     const mo = +m[1], da = +m[2];
     if (mo < 1 || mo > 12 || da < 1 || da > 31) return null;
-    return toDateStr(+year, mo, da);
+    const candidate = toDateStr(+year, mo, da);
+    if (candidate > fallbackDate) return null;
+    return candidate;
   }
 
   /* 날짜 언급이 없으면, 그날그날 저장된 묵상 본문을 언급한 메시지로 날짜를 추정.
@@ -579,6 +781,7 @@
   function detectPassageDate(text, fallbackDate){
     let best = null, bestScore = 0, bestDist = Infinity;
     Object.keys(state.readings).forEach(d=>{
+      if (d > fallbackDate) return; // 게시 시각보다 나중 날짜의 본문(예: 미리 입력해둔 다음날 본문)은 후보에서 제외
       const score = readingMatchScore(text, state.readings[d]);
       if (score === 0) return;
       const dist = Math.abs(new Date(d) - new Date(fallbackDate));
@@ -619,87 +822,89 @@
     return withoutUrls.length < state.settings.threshold;
   }
 
-  const PHOTO_CATCHUP_LOOKBACK = 14;
-
-  /* dateStr 이전으로 거슬러 올라가며, 이 사람이 완료로 기록되지 않은 연속 날짜를 모음
-     (이미 완료로 기록된 날을 만나거나, 기록 자체가 없는 범위까지 가면 멈춤) */
-  function collectMissingDates(name, beforeDateStr, maxLookback){
-    const recordedDates = Object.keys(state.records).sort();
-    const minDate = recordedDates.length ? recordedDates[0] : null;
-    const dates = [];
-    let d = addDays(beforeDateStr, -1);
-    while (dates.length < maxLookback){
-      if (minDate && d < minDate) break;
-      const rec = state.records[d];
-      const isDone = rec && Object.prototype.hasOwnProperty.call(rec, name) && rec[name];
-      if (isDone) break;
-      dates.push(d);
+  /* '사진 N장'처럼 한 번에 여러 장을 올리면 밀린 인증을 몰아서 제출한 것으로 보고,
+     그 날짜(dateStr)부터 거슬러 N일치를 모두 완료로 채움 */
+  function fillPhotoCatchup(name, dateStr, count){
+    let d = dateStr;
+    for (let k = 0; k < count; k++){
+      state.records[d] = state.records[d] || {};
+      state.records[d][name] = true;
       d = addDays(d, -1);
     }
-    return dates;
   }
 
-  function analyze(dateStr){
+  /* 붙여넣은/업로드한 대화 전체를 한 번에 훑어, 대화에 등장하는 모든 날짜를 각각 집계해 state.records에 반영.
+     예전에는 '집계 날짜'로 고른 하루치만 저장되어 과거 기록을 보려면 날짜를 하나씩 바꿔가며 매번 다시 분석해야 했음. */
+  function analyzeAllDates(){
     const allMessages = parseChat(state.lastChatText || '');
-    const dayMessages = allMessages.filter(m => resolveMessageDate(m.text, m.date) === dateStr);
-    const readingTok = readingTokens(state.readings[dateStr]);
-
-    const bySender = {};
-    dayMessages.forEach(m=>{
-      if (state.excluded.includes(m.sender)) return;
-      (bySender[m.sender] = bySender[m.sender] || []).push(m.text);
+    const byDate = {};
+    allMessages.forEach(m=>{
+      const d = resolveMessageDate(m.text, m.date);
+      (byDate[d] = byDate[d] || []).push(m);
     });
-    const todaySenders = Object.keys(bySender);
+    const allDates = Object.keys(byDate).sort();
 
-    const doneByReal = {};
-    const unmapped = [];
-    const photoReview = [];
-    todaySenders.forEach(sender=>{
-      const msgs = bySender[sender];
-      const qualifying = msgs.filter(t =>
-        t.trim().length <= state.settings.noticeMax && !isNoticeMessage(t) && !isLinkOnlyMessage(t)
-      );
-      const photoOk = !state.photoExcluded.includes(sender);
-      const done = qualifying.some(t =>
-        t.trim().length >= state.settings.threshold ||
-        mentionsReading(t, readingTok) ||
-        (photoOk && isPhotoMessage(t))
-      );
-      const real = state.mapping[sender];
-      if (!real){ unmapped.push(sender); return; }
-      doneByReal[real] = !!doneByReal[real] || done;
+    const unmappedSet = new Set();
+    const senderSet = new Set();
 
-      if (photoOk){
-        const multiPhoto = msgs.map(t=>t.trim()).find(t => /^사진\s*\d+\s*장$/.test(t));
-        if (multiPhoto){
-          const count = +/^사진\s*(\d+)\s*장$/.exec(multiPhoto)[1];
-          if (count >= 2){
-            const missing = collectMissingDates(real, dateStr, PHOTO_CATCHUP_LOOKBACK);
-            if (missing.length + 1 === count){
-              missing.forEach(d=>{
-                state.records[d] = state.records[d] || {};
-                state.records[d][real] = true;
-              });
+    allDates.forEach(dateStr=>{
+      const dayMessages = byDate[dateStr];
+      const readingTok = readingTokens(state.readings[dateStr]);
+
+      const bySender = {};
+      dayMessages.forEach(m=>{
+        if (state.excluded.includes(m.sender)) return;
+        senderSet.add(m.sender);
+        (bySender[m.sender] = bySender[m.sender] || []).push(m.text);
+      });
+
+      const doneByReal = {};
+      Object.keys(bySender).forEach(sender=>{
+        const msgs = bySender[sender];
+        const qualifying = msgs.filter(t =>
+          t.trim().length <= state.settings.noticeMax && !isNoticeMessage(t) && !isLinkOnlyMessage(t)
+        );
+        const photoOk = !state.photoExcluded.includes(sender);
+        const done = qualifying.some(t =>
+          t.trim().length >= state.settings.threshold ||
+          mentionsReading(t, readingTok) ||
+          (photoOk && isPhotoMessage(t))
+        );
+        const real = state.mapping[sender];
+        if (!real){ unmappedSet.add(sender); return; }
+        doneByReal[real] = !!doneByReal[real] || done;
+
+        if (photoOk){
+          const multiPhoto = msgs.map(t=>t.trim()).find(t => /^사진\s*\d+\s*장$/.test(t));
+          if (multiPhoto){
+            const count = +/^사진\s*(\d+)\s*장$/.exec(multiPhoto)[1];
+            if (count >= 2){
+              fillPhotoCatchup(real, dateStr, count);
               doneByReal[real] = true;
-            } else {
-              photoReview.push({ name: real, count, missing: missing.length });
             }
           }
         }
-      }
+      });
+
+      state.records[dateStr] = state.records[dateStr] || {};
+      state.roster.forEach(r => { state.records[dateStr][r.name] = !!doneByReal[r.name]; });
     });
 
-    state.records[dateStr] = state.records[dateStr] || {};
-    state.roster.forEach(r => { state.records[dateStr][r.name] = !!doneByReal[r.name]; });
+    cleanupFutureRecords();
     saveRecords();
 
+    state.lastAllSenders = [...senderSet].sort();
+    return { allDates, unmapped: [...unmappedSet] };
+  }
+
+  /* 이미 집계돼 저장된 state.records에서 특정 날짜의 결과 표만 뽑아 보여줌 (재분석 없이 날짜만 바꿔도 즉시 표시) */
+  function buildDayResult(dateStr){
+    const rec = state.records[dateStr] || null;
     const rows = state.roster.map(r=>{
       const s = getStats(r.name, dateStr);
-      return { name: r.name, done: !!doneByReal[r.name], rate: s.rate, streak: s.streak };
+      return { name: r.name, done: !!(rec && rec[r.name]), rate: s.rate, streak: s.streak };
     });
-
-    state.lastResults = { dateStr, rows, unmapped, todaySenders, photoReview, noCandidates: todaySenders.length === 0 };
-    return state.lastResults;
+    return { dateStr, rows, noCandidates: !rec };
   }
 
   /* ---------------- 집계 탭 렌더 ---------------- */
@@ -721,26 +926,40 @@
   document.getElementById('btnAnalyze').addEventListener('click', ()=>{
     state.lastChatText = chatInput.value;
     localStorage.setItem(LS.lastChat, state.lastChatText);
+    const batch = analyzeAllDates();
+    state.lastBatch = batch;
     const dateStr = aggDateInput.value || yesterdayStr();
-    const result = analyze(dateStr);
-    renderAggWarnings(result);
+    const result = buildDayResult(dateStr);
+    state.lastResults = result;
+    renderAggWarnings(batch, result);
     renderResultTable(result);
     renderExportPreview();
   });
 
-  function renderAggWarnings(result){
+  aggDateInput.addEventListener('change', ()=>{
+    if (!state.lastBatch) return;
+    const dateStr = aggDateInput.value || yesterdayStr();
+    const result = buildDayResult(dateStr);
+    state.lastResults = result;
+    renderAggWarnings(state.lastBatch, result);
+    renderResultTable(result);
+  });
+
+  function renderAggWarnings(batch, result){
     const el = document.getElementById('aggWarnings');
     el.innerHTML = '';
+    if (!batch.allDates.length){
+      el.innerHTML += `<div class="banner banner-warning"><b>후보 없음</b> — 붙여넣은 대화에서 날짜를 인식하지 못했습니다. 대화 범위나 형식을 확인하세요.</div>`;
+      return;
+    }
+    el.innerHTML += `<div class="banner banner-info"><b>${batch.allDates.length}일치 집계 완료</b> (${batch.allDates[0]} ~ ${batch.allDates[batch.allDates.length-1]}). 날짜를 바꿔가며 결과를 바로 확인할 수 있고, 「내보내기」 탭에서 전체 기간을 한 번에 볼 수 있습니다.</div>`;
     if (result.noCandidates){
-      el.innerHTML += `<div class="banner banner-warning"><b>후보 없음</b> — 선택한 날짜(${result.dateStr})에 감지된 메시지가 없습니다. 날짜나 붙여넣은 대화 범위, 대화 형식을 확인하세요.</div>`;
+      el.innerHTML += `<div class="banner banner-warning">선택한 날짜(${result.dateStr})에는 감지된 메시지가 없습니다.</div>`;
     }
-    if (result.unmapped.length){
-      const chips = result.unmapped.map(n=>`<span class="chip">${escapeHtml(n)}</span>`).join('');
-      el.innerHTML += `<div class="banner banner-warning"><b>미매핑 이름 ${result.unmapped.length}건</b> — 아래 표시 이름이 명단에 연결되지 않아 집계에서 제외되었습니다. 「매핑」 탭에서 연결하세요.<div>${chips}</div></div>`;
+    if (batch.unmapped.length){
+      const chips = batch.unmapped.map(n=>`<span class="chip ${chipColorClass(n)}">${escapeHtml(n)}</span>`).join('');
+      el.innerHTML += `<div class="banner banner-warning"><b>미매핑 이름 ${batch.unmapped.length}건</b> — 대화 전체에서 아래 표시 이름이 명단에 연결되지 않아 해당 날짜들의 집계에서 제외되었습니다. 「매핑」 탭에서 연결한 뒤 다시 분석하세요.<div>${chips}</div></div>`;
     }
-    (result.photoReview || []).forEach(pr=>{
-      el.innerHTML += `<div class="banner banner-warning"><b>사진 일괄인증 확인 필요</b> — ${escapeHtml(pr.name)}님이 사진 ${pr.count}장을 올렸는데, 미완료로 보이는 이전 날짜는 ${pr.missing}일이라 자동으로 채우지 않았습니다. 「내보내기」 탭에서 날짜 칸을 눌러 직접 표시해주세요.</div>`;
-    });
   }
 
   function renderResultTable(result){
@@ -765,18 +984,26 @@
     return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   }
 
+  /* 미매핑 이름 칩에 이름별로 고정된 색을 배정 (3색 순환) */
+  function chipColorClass(name){
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
+    return 'chip-' + (hash % 3);
+  }
+
   /* ---------------- 매핑 탭 렌더 ---------------- */
   function renderMapping(){
     const el = document.getElementById('mappingList');
-    if (!state.lastResults || !state.lastResults.todaySenders.length){
-      el.innerHTML = '<p class="empty">먼저 「집계」 탭에서 분석을 실행하면 발신자 목록이 표시됩니다.</p>';
+    const senders = state.lastAllSenders || [];
+    if (!senders.length){
+      el.innerHTML = '<p class="empty">먼저 「집계」 탭에서 분석을 실행하면 대화 전체에서 발견된 발신자 목록이 표시됩니다.</p>';
       return;
     }
     if (!state.roster.length){
       el.innerHTML = '<p class="empty">「명단·설정」 탭에서 명단을 먼저 등록하세요.</p>';
       return;
     }
-    el.innerHTML = state.lastResults.todaySenders.map(sender=>{
+    el.innerHTML = senders.map(sender=>{
       const current = state.mapping[sender] || '';
       const options = ['<option value="">연결 안 함</option>']
         .concat(state.roster.map(r => `<option value="${escapeHtml(r.name)}" ${r.name===current?'selected':''}>${escapeHtml(r.name)}</option>`))
@@ -794,8 +1021,12 @@
         if (sel.value) state.mapping[sender] = sel.value;
         else delete state.mapping[sender];
         saveMapping();
-        const result = analyze(state.lastResults.dateStr);
-        renderAggWarnings(result);
+        const batch = analyzeAllDates();
+        state.lastBatch = batch;
+        const dateStr = (state.lastResults && state.lastResults.dateStr) || aggDateInput.value || yesterdayStr();
+        const result = buildDayResult(dateStr);
+        state.lastResults = result;
+        renderAggWarnings(batch, result);
         renderResultTable(result);
         renderExportPreview();
       });
@@ -1091,22 +1322,57 @@
     renderExportPreview();
   });
 
+  /* html2canvas는 대상 엘리먼트 자신의 렌더링 박스 크기만큼만 캡처한다. #exportPreview는
+     #appShell(max-width:720px) 안에 있어 폭이 화면 크기로 제한되고, 날짜 칸이 많은 달(29~31일)은
+     그 폭을 넘어서는 부분이 overflow-x:auto로 가려진 채 잘려서 캡처되던 문제가 있었음.
+     캡처 직전 스크롤 박스와 미리보기 컨테이너 폭을 표의 실제 전체 너비(max-content)로 잠깐 넓혀도,
+     html2canvas는 내부적으로 브라우저 창 크기(windowWidth/Height, 기본값 = 현재 뷰포트)만큼만
+     렌더링하는 가짜 창을 만들기 때문에 그 창보다 넓게 확장된 부분은 여전히 잘려서 캡처된다.
+     그래서 확장된 실제 크기(getBoundingClientRect)를 재서 windowWidth/windowHeight로 명시적으로
+     넘겨줘야 화면 크기와 무관하게 표 전체가 한 번에 다 캡처된다. */
+  function captureExportCanvas(){
+    const scrollBox = document.querySelector('.ep-table-scroll');
+    const preview = document.getElementById('exportPreview');
+    const prev = {
+      overflow: scrollBox.style.overflow,
+      scrollWidth: scrollBox.style.width,
+      previewWidth: preview.style.width
+    };
+    scrollBox.style.overflow = 'visible';
+    scrollBox.style.width = 'max-content';
+    preview.style.width = 'max-content';
+    const rect = preview.getBoundingClientRect();
+    const windowWidth = Math.ceil(rect.left + rect.width) + 40;
+    const windowHeight = Math.ceil(rect.top + rect.height) + 40;
+    return html2canvas(preview, { scale: 2, backgroundColor: '#ffffff', windowWidth, windowHeight })
+      .finally(()=>{
+        scrollBox.style.overflow = prev.overflow;
+        scrollBox.style.width = prev.scrollWidth;
+        preview.style.width = prev.previewWidth;
+      });
+  }
+
   document.getElementById('btnExportPdf').addEventListener('click', ()=>{
-    const el = document.getElementById('exportPreview');
     const ym = exportMonthInput.value || todayStr().slice(0, 7);
-    html2pdf().set({
-      margin: 10,
-      filename: `QT나눔표_${ym}.pdf`,
-      image: { type: 'jpeg', quality: 0.98 },
-      html2canvas: { scale: 2, backgroundColor: '#ffffff' },
-      jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
-    }).from(el).save();
+    captureExportCanvas().then(canvas=>{
+      const { jsPDF } = window.jspdf;
+      const PAGE_W = 297, PAGE_H = 210, margin = 8; // mm, A4 가로(landscape) 한 장에 맞춤
+      const maxW = PAGE_W - margin * 2;
+      const maxH = PAGE_H - margin * 2;
+      const imgRatio = canvas.width / canvas.height;
+      let drawW = maxW, drawH = maxW / imgRatio;
+      if (drawH > maxH){ drawH = maxH; drawW = maxH * imgRatio; }
+      const offsetX = (PAGE_W - drawW) / 2;
+      const offsetY = (PAGE_H - drawH) / 2;
+      const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'landscape' });
+      pdf.addImage(canvas.toDataURL('image/jpeg', 0.98), 'JPEG', offsetX, offsetY, drawW, drawH);
+      pdf.save(`QT나눔표_${ym}.pdf`);
+    });
   });
 
   document.getElementById('btnExportPng').addEventListener('click', ()=>{
-    const el = document.getElementById('exportPreview');
     const ym = exportMonthInput.value || todayStr().slice(0, 7);
-    html2canvas(el, { scale: 2, backgroundColor: '#ffffff' }).then(canvas=>{
+    captureExportCanvas().then(canvas=>{
       const link = document.createElement('a');
       link.download = `QT나눔표_${ym}.png`;
       link.href = canvas.toDataURL('image/png');
@@ -1133,11 +1399,29 @@
     URL.revokeObjectURL(url);
   });
 
+  /* ---------------- 랜딩 화면 ---------------- */
+  /* 화면(갤러리 포함) 아무 곳이나 탭하면 "시작하기" 버튼 위치로 자연스럽게 스크롤 이동.
+     기존 bento 갤러리의 스크롤 연동 전환 효과는 그대로 두고, 탭으로 그 스크롤을 대신 진행시켜주는 방식 —
+     스크롤/드래그로는 click이 발생하지 않으므로 갤러리를 직접 손으로 넘기는 동작과도 충돌하지 않음 */
+  function enterApp(){
+    document.getElementById('landingScreen').style.display = 'none';
+    document.getElementById('appShell').style.display = '';
+    window.scrollTo(0, 0);
+  }
+  document.getElementById('btnLandingStart').addEventListener('click', (e)=>{
+    e.stopPropagation();
+    enterApp();
+  });
+  document.getElementById('landingScreen').addEventListener('click', ()=>{
+    document.getElementById('btnLandingStart').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
+
   /* ---------------- 초기화 ---------------- */
   function init(){
     const now = new Date();
     document.getElementById('topbarDate').textContent =
       `${now.getMonth()+1}/${now.getDate()} (${weekdayKor(todayStr())})`;
+    cleanupFutureRecords();
     renderRoster();
     renderExcluded();
     renderPhotoExcluded();
@@ -1146,6 +1430,52 @@
   }
   init();
 
+})();
+</script>
+
+<script>
+(function(){
+  "use strict";
+  /* 랜딩 화면 bento 갤러리: 스크롤하면 격자 사진이 화면 전체로 확대 전환됨 (GSAP Flip + ScrollTrigger) */
+  gsap.registerPlugin(ScrollTrigger);
+  gsap.registerPlugin(Flip);
+
+  let flipCtx;
+
+  const createTween = () => {
+    const galleryElement = document.querySelector("#gallery-8");
+    if (!galleryElement) return;
+    const galleryItems = galleryElement.querySelectorAll(".gallery__item");
+
+    flipCtx && flipCtx.revert();
+    galleryElement.classList.remove("gallery--final");
+
+    flipCtx = gsap.context(() => {
+      galleryElement.classList.add("gallery--final");
+      const flipState = Flip.getState(galleryItems);
+      galleryElement.classList.remove("gallery--final");
+
+      const flip = Flip.to(flipState, {
+        simple: true,
+        ease: "expoScale(1, 5)"
+      });
+
+      const tl = gsap.timeline({
+        scrollTrigger: {
+          trigger: galleryElement,
+          start: "center center",
+          end: "+=100%",
+          scrub: true,
+          pin: galleryElement.parentNode
+        }
+      });
+      tl.add(flip);
+      return () => gsap.set(galleryItems, { clearProps: "all" });
+    });
+  };
+  createTween();
+
+  window.addEventListener("resize", createTween);
 })();
 </script>
 </body>
