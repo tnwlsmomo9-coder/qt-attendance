@@ -203,6 +203,22 @@
   .roster-item-fields{ display:flex; gap:8px; margin-top:8px; }
   .roster-item-fields input{ flex:1; font-size:13px; padding:8px 10px; }
 
+  /* 명단 항목에 연결된 카톡 표시 이름 (매핑 요약) */
+  .roster-item-links{ display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-top:8px; }
+  .roster-item-links .link-chip{
+    display:inline-flex; align-items:center; gap:4px;
+    background:var(--color-primary-tint); color:var(--color-primary-dark);
+    border-radius:var(--radius-sm); padding:3px 4px 3px 9px; font-size:12px;
+  }
+  .roster-item-links .link-chip button{
+    background:none; border:none; color:inherit; cursor:pointer; font-size:13px; line-height:1;
+    padding:2px 5px; opacity:0.6;
+  }
+  .roster-item-links .link-chip button:hover{ opacity:1; }
+  .roster-item-links select.link-add{
+    width:auto; max-width:140px; font-size:12px; padding:4px 6px; color:var(--color-ink-muted-48);
+  }
+
   .chip{
     display:inline-flex; align-items:center; gap:6px;
     background:var(--color-surface-pearl); border:1px solid var(--color-divider-soft);
@@ -421,7 +437,7 @@
     <section class="panel" id="panel-mapping">
       <div class="card">
         <h2>발신자 매핑</h2>
-        <p class="hint">최근 분석에서 발견된 표시 이름을 명단의 실명에 연결하세요. 표시 이름이 명단 이름과 완전히 같으면 별도 연결 없이도 자동으로 매칭됩니다. 한 번 연결하면 다음부터 자동으로 매칭됩니다.</p>
+        <p class="hint">최근 분석에서 발견된 표시 이름을 명단의 실명에 연결하세요. 표시 이름에 명단 이름이 포함돼 있으면(이모지·직함이 붙어 있어도) 별도 연결 없이도 자동으로 매칭됩니다. 한 번 연결하면 다음부터 자동으로 매칭됩니다.</p>
         <div id="mappingList"></div>
       </div>
     </section>
@@ -430,7 +446,7 @@
     <section class="panel" id="panel-settings">
       <div class="card">
         <h2>명단</h2>
-        <p class="hint">여부 표에 표시될 실명 목록입니다. 이름을 클릭해 바로 수정할 수 있습니다 — 수정하면 매핑·기록도 함께 옮겨집니다.</p>
+        <p class="hint">여부 표에 표시될 실명 목록입니다. 이름을 클릭해 바로 수정할 수 있습니다 — 수정하면 매핑·기록도 함께 옮겨집니다. 「집계」 탭에서 분석을 실행하면 각 사람에게 연결된 카톡 표시 이름을 여기서 바로 확인·수정할 수 있어요.</p>
         <div id="rosterList"></div>
         <div class="row" style="margin-top:var(--space-sm);">
           <input type="text" id="rosterInput" placeholder="이름 추가">
@@ -829,6 +845,21 @@
     }
   }
 
+  function normalizeForMatch(s){
+    return String(s).replace(/\s+/g, '');
+  }
+
+  /* 표시 이름이 명단 실명을 포함하고 있으면(이모지·직함 등이 앞뒤로 붙어 있어도) 매핑 탭에서
+     따로 연결하지 않아도 자동으로 그 사람으로 인식. 여러 명단 이름이 동시에 포함되는 경우(모호함)는
+     자동 매칭하지 않고 미매핑으로 남겨 수동으로 정하게 함.
+     단, 매핑 탭·명단 탭에서 명시적으로 "연결 안 함"(state.mapping[sender] === '')을 선택했다면 자동 매칭보다 우선함 */
+  function resolveSenderReal(sender){
+    if (Object.prototype.hasOwnProperty.call(state.mapping, sender)) return state.mapping[sender] || null;
+    const norm = normalizeForMatch(sender);
+    const matches = state.roster.filter(r => norm.includes(normalizeForMatch(r.name)));
+    return matches.length === 1 ? matches[0].name : null;
+  }
+
   /* 붙여넣은/업로드한 대화 전체를 한 번에 훑어, 대화에 등장하는 모든 날짜를 각각 집계해 state.records에 반영.
      예전에는 '집계 날짜'로 고른 하루치만 저장되어 과거 기록을 보려면 날짜를 하나씩 바꿔가며 매번 다시 분석해야 했음. */
   function analyzeAllDates(){
@@ -842,14 +873,6 @@
 
     const unmappedSet = new Set();
     const senderSet = new Set();
-    const rosterNameSet = new Set(state.roster.map(r => r.name));
-
-    /* 표시 이름이 명단 실명과 글자 그대로 같으면, 매핑 탭에서 따로 연결하지 않아도 자동으로 그 사람으로 인식.
-       단, 매핑 탭에서 명시적으로 "연결 안 함"(state.mapping[sender] === '')을 선택했다면 자동 매칭보다 우선함 */
-    function resolveReal(sender){
-      if (Object.prototype.hasOwnProperty.call(state.mapping, sender)) return state.mapping[sender] || null;
-      return rosterNameSet.has(sender) ? sender : null;
-    }
 
     allDates.forEach(dateStr=>{
       const dayMessages = byDate[dateStr];
@@ -872,7 +895,7 @@
           mentionsReading(t, readingTok) ||
           (photoOk && isPhotoMessage(t))
         );
-        const real = resolveReal(sender);
+        const real = resolveSenderReal(sender);
         if (!real){ unmappedSet.add(sender); return; }
         doneByReal[real] = !!doneByReal[real] || done;
 
@@ -993,6 +1016,18 @@
     return 'chip-' + (hash % 3);
   }
 
+  /* 매핑·명단 탭에서 연결을 바꾼 뒤 공통으로 다시 돌리는 재분석 + 화면 갱신 */
+  function reanalyzeAndRefresh(){
+    const batch = analyzeAllDates();
+    state.lastBatch = batch;
+    const dateStr = (state.lastResults && state.lastResults.dateStr) || aggDateInput.value || yesterdayStr();
+    const result = buildDayResult(dateStr);
+    state.lastResults = result;
+    renderAggWarnings(batch, result);
+    renderResultTable(result);
+    renderExportPreview();
+  }
+
   /* ---------------- 매핑 탭 렌더 ---------------- */
   function renderMapping(){
     const el = document.getElementById('mappingList');
@@ -1005,11 +1040,10 @@
       el.innerHTML = '<p class="empty">「명단·설정」 탭에서 명단을 먼저 등록하세요.</p>';
       return;
     }
-    const rosterNameSet = new Set(state.roster.map(r => r.name));
     el.innerHTML = senders.map(sender=>{
       const explicit = Object.prototype.hasOwnProperty.call(state.mapping, sender);
-      const autoMatched = !explicit && rosterNameSet.has(sender);
-      const current = explicit ? (state.mapping[sender] || '') : (autoMatched ? sender : '');
+      const autoMatched = !explicit && !!resolveSenderReal(sender);
+      const current = explicit ? (state.mapping[sender] || '') : (autoMatched ? resolveSenderReal(sender) : '');
       const options = ['<option value="">연결 안 함</option>']
         .concat(state.roster.map(r => `<option value="${escapeHtml(r.name)}" ${r.name===current?'selected':''}>${escapeHtml(r.name)}</option>`))
         .join('');
@@ -1026,14 +1060,8 @@
         const sender = sel.dataset.sender;
         state.mapping[sender] = sel.value || '';
         saveMapping();
-        const batch = analyzeAllDates();
-        state.lastBatch = batch;
-        const dateStr = (state.lastResults && state.lastResults.dateStr) || aggDateInput.value || yesterdayStr();
-        const result = buildDayResult(dateStr);
-        state.lastResults = result;
-        renderAggWarnings(batch, result);
-        renderResultTable(result);
-        renderExportPreview();
+        reanalyzeAndRefresh();
+        renderRoster();
       });
     });
   }
@@ -1069,8 +1097,22 @@
     const ordered = state.roster
       .map((r,i)=>({ r, i }))
       .sort((a,b)=> collator.compare(a.r.name, b.r.name));
+    const allSenders = state.lastAllSenders || [];
     el.innerHTML = ordered.length
-      ? ordered.map(({r,i})=>`
+      ? ordered.map(({r,i})=>{
+          const linked = allSenders.filter(s => resolveSenderReal(s) === r.name);
+          const unlinked = allSenders.filter(s => !resolveSenderReal(s));
+          const chips = linked.map(s => `<span class="link-chip">${escapeHtml(s)}<button data-unlink="${escapeHtml(s)}" aria-label="연결 해제">×</button></span>`).join('');
+          const addSelect = unlinked.length
+            ? `<select class="link-add" data-roster="${escapeHtml(r.name)}">
+                 <option value="">+ 표시 이름 연결</option>
+                 ${unlinked.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('')}
+               </select>`
+            : '';
+          const linksBlock = allSenders.length
+            ? `<div class="roster-item-links">${chips}${addSelect}</div>`
+            : '';
+          return `
           <div class="roster-item">
             <div class="roster-item-top">
               <input type="text" class="roster-name" data-i="${i}" value="${escapeHtml(r.name)}">
@@ -1079,7 +1121,9 @@
             <div class="roster-item-fields">
               <input type="text" class="roster-note" data-i="${i}" placeholder="비고" value="${escapeHtml(r.note||'')}">
             </div>
-          </div>`).join('')
+            ${linksBlock}
+          </div>`;
+        }).join('')
       : '<p class="empty">등록된 명단이 없습니다.</p>';
     el.querySelectorAll('button[data-i]').forEach(btn=>{
       btn.addEventListener('click', ()=>{
@@ -1102,6 +1146,25 @@
         const ok = renameRosterMember(i, input.value);
         input.value = state.roster[i].name;
         if (ok) { renderRoster(); renderMapping(); renderExportPreview(); }
+      });
+    });
+    el.querySelectorAll('button[data-unlink]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        state.mapping[btn.dataset.unlink] = '';
+        saveMapping();
+        reanalyzeAndRefresh();
+        renderRoster();
+        renderMapping();
+      });
+    });
+    el.querySelectorAll('select.link-add').forEach(sel=>{
+      sel.addEventListener('change', ()=>{
+        if (!sel.value) return;
+        state.mapping[sel.value] = sel.dataset.roster;
+        saveMapping();
+        reanalyzeAndRefresh();
+        renderRoster();
+        renderMapping();
       });
     });
   }
