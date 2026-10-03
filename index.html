@@ -626,6 +626,7 @@
     photoExcluded: 'qt_photoExcluded',
     settings: 'qt_settings',
     records: 'qt_records',
+    manualOverrides: 'qt_manualOverrides',
     readings: 'qt_readings',
     lastChat: 'qt_lastChatText',
     backendUrl: 'qt_backendUrl',
@@ -647,6 +648,7 @@
     photoExcluded: load(LS.photoExcluded, []),
     settings: load(LS.settings, { threshold:20, roomName:'' }),
     records: load(LS.records, {}),
+    manualOverrides: load(LS.manualOverrides, {}),
     readings: load(LS.readings, {}),
     lastChatText: localStorage.getItem(LS.lastChat) || '',
     backendUrl: localStorage.getItem(LS.backendUrl) || DEFAULT_BACKEND_URL,
@@ -661,6 +663,7 @@
   function savePhotoExcluded(){ save(LS.photoExcluded, state.photoExcluded); scheduleAutoPush(); }
   function saveSettings(){ save(LS.settings, state.settings); scheduleAutoPush(); }
   function saveRecords(){ save(LS.records, state.records); scheduleAutoPush(); }
+  function saveManualOverrides(){ save(LS.manualOverrides, state.manualOverrides); scheduleAutoPush(); }
 
   /* 오늘 이후 날짜에는 인증 기록이 있을 수 없음(아직 안 지난 날). 과거 날짜 오인식 버그로
      잘못 채워졌던 미래 날짜 기록이 남아있다면 여기서 정리 */
@@ -806,18 +809,30 @@
   }
 
   /* ---------------- 통계(출석률/연속일수) ---------------- */
+  function hasAttendanceValue(name, dateStr){
+    const value = attendanceValue(name, dateStr);
+    return value !== undefined && value !== null;
+  }
+
+  function attendanceValue(name, dateStr){
+    const overrides = state.manualOverrides[dateStr];
+    if (overrides && Object.prototype.hasOwnProperty.call(overrides, name)) return overrides[name];
+    const rec = state.records[dateStr];
+    return rec && Object.prototype.hasOwnProperty.call(rec, name) ? rec[name] : undefined;
+  }
+
   function getStats(name, uptoDateStr){
     const month = uptoDateStr.slice(0, 7);
-    const dates = Object.keys(state.records)
-      .filter(d => d <= uptoDateStr && d.slice(0, 7) === month && Object.prototype.hasOwnProperty.call(state.records[d], name))
+    const dates = [...new Set([...Object.keys(state.records), ...Object.keys(state.manualOverrides)])]
+      .filter(d => d <= uptoDateStr && d.slice(0, 7) === month && hasAttendanceValue(name, d))
       .sort();
     const total = dates.length;
     let doneCount = 0;
-    dates.forEach(d => { if (state.records[d][name]) doneCount++; });
+    dates.forEach(d => { if (attendanceValue(name, d)) doneCount++; });
     const rate = total ? Math.round((doneCount/total)*100) : 0;
     let streak = 0;
     for (let i = dates.length-1; i>=0; i--){
-      if (state.records[dates[i]][name]) streak++; else break;
+      if (attendanceValue(name, dates[i])) streak++; else break;
     }
     return { rate, streak };
   }
@@ -878,6 +893,21 @@
 
   function resolveMessageDate(text, fallbackDate){
     return detectExplicitDate(text, fallbackDate) || detectPassageDate(text, fallbackDate) || fallbackDate;
+  }
+
+  /* 한 카카오톡 메시지에 밀린 QT를 여러 날짜로 이어 적은 경우, 줄 시작의
+     "날짜[성경본문]" 헤더가 2개 이상일 때만 날짜별 가상 메시지로 나눈다.
+     단일 헤더 메시지와 일반 본문 속 날짜 언급은 기존 날짜 판정 경로를 그대로 사용한다. */
+  function splitMessageDateBlocks(message){
+    const text = message.text || '';
+    const headerPattern = /^[ \t]*(?:(\d{1,2})\s*월\s*(\d{1,2})\s*일|(\d{1,2})\s*[\/.]\s*(\d{1,2})(?!\s*[:.\d]))\s*(?=\[[^\]\r\n]*\d+\s*[:장])/gm;
+    const headers = [...text.matchAll(headerPattern)];
+    if (headers.length < 2) return [message];
+
+    return headers.map((header, i)=>({
+      ...message,
+      text: text.slice(header.index, i + 1 < headers.length ? headers[i + 1].index : text.length).trim()
+    }));
   }
 
   /* 카톡 내보내기에서 사진은 "사진", "사진 3장" 같은 안내 문구로 대체됨.
@@ -958,7 +988,7 @@
   /* 붙여넣은/업로드한 대화 전체를 한 번에 훑어, 대화에 등장하는 모든 날짜를 각각 집계해 state.records에 반영.
      예전에는 '집계 날짜'로 고른 하루치만 저장되어 과거 기록을 보려면 날짜를 하나씩 바꿔가며 매번 다시 분석해야 했음. */
   function analyzeAllDates(){
-    const allMessages = parseChat(state.lastChatText || '');
+    const allMessages = parseChat(state.lastChatText || '').flatMap(splitMessageDateBlocks);
     const byDate = {};
     allMessages.forEach(m=>{
       const d = resolveMessageDate(m.text, m.date);
@@ -1021,11 +1051,12 @@
   /* 이미 집계돼 저장된 state.records에서 특정 날짜의 결과 표만 뽑아 보여줌 (재분석 없이 날짜만 바꿔도 즉시 표시) */
   function buildDayResult(dateStr){
     const rec = state.records[dateStr] || null;
+    const overrides = state.manualOverrides[dateStr] || null;
     const rows = state.roster.filter(r => !state.excluded.includes(r.name)).map(r=>{
       const s = getStats(r.name, dateStr);
-      return { name: r.name, done: !!(rec && rec[r.name]), rate: s.rate, streak: s.streak };
+      return { name: r.name, done: attendanceValue(r.name, dateStr) === true, rate: s.rate, streak: s.streak };
     });
-    return { dateStr, rows, noCandidates: !rec };
+    return { dateStr, rows, noCandidates: !rec && !overrides };
   }
 
   /* ---------------- 집계 탭 렌더 ---------------- */
@@ -1192,9 +1223,17 @@
         delete rec[oldName];
       }
     });
+    Object.keys(state.manualOverrides).forEach(d=>{
+      const overrides = state.manualOverrides[d];
+      if (Object.prototype.hasOwnProperty.call(overrides, oldName)){
+        overrides[newName] = overrides[oldName];
+        delete overrides[oldName];
+      }
+    });
     saveRoster();
     saveMapping();
     saveRecords();
+    saveManualOverrides();
     return true;
   }
 
@@ -1453,7 +1492,7 @@
   /* ---------------- 로컬 데이터 백업·복원 ----------------
      카카오톡 원문(lastChatText)은 개인정보 보호 원칙에 따라 백업 대상에서 제외한다.
      나중에 백엔드를 붙일 때도 같은 payload 구조를 그대로 전송할 수 있도록 schemaVersion을 둔다. */
-  const LOCAL_BACKUP_SCHEMA_VERSION = 1;
+  const LOCAL_BACKUP_SCHEMA_VERSION = 2;
 
   function buildLocalBackupPayload(){
     return {
@@ -1467,6 +1506,7 @@
         photoExcluded: state.photoExcluded,
         settings: state.settings,
         records: state.records,
+        manualOverrides: state.manualOverrides,
         readings: state.readings
       }
     };
@@ -1500,6 +1540,7 @@
       && Array.isArray(d.photoExcluded)
       && d.settings && typeof d.settings === 'object' && !Array.isArray(d.settings)
       && d.records && typeof d.records === 'object' && !Array.isArray(d.records)
+      && (d.manualOverrides == null || (typeof d.manualOverrides === 'object' && !Array.isArray(d.manualOverrides)))
       && d.readings && typeof d.readings === 'object' && !Array.isArray(d.readings));
   }
 
@@ -1516,6 +1557,7 @@
     state.photoExcluded = [...d.photoExcluded];
     state.settings = Object.assign({ threshold:20, roomName:'' }, d.settings);
     state.records = {...d.records};
+    state.manualOverrides = {...(d.manualOverrides || {})};
     state.readings = {...d.readings};
     state.lastResults = null;
 
@@ -1525,6 +1567,7 @@
     savePhotoExcluded();
     saveSettings();
     saveRecords();
+    saveManualOverrides();
     saveReadings();
     cleanupFutureRecords();
 
@@ -1579,6 +1622,7 @@
   let backendInitTimer = null;
   let initialPullComplete = false;
   let localDirty = false;
+  let localRevision = 0;
   let remoteInitializationPromise = null;
   let initializedBackendKey = '';
 
@@ -1666,16 +1710,22 @@
     if (syncBusy) return false;
     if (!opts.verbose && (localDirty || autoPushTimer)) return false;
     if (!opts.verbose && !opts.initial && (document.hidden || isEditingFocused())) return false;
-    if (opts.verbose && autoPushTimer){
-      clearTimeout(autoPushTimer);
-      autoPushTimer = null;
+    if (opts.verbose){
+      if (autoPushTimer){
+        clearTimeout(autoPushTimer);
+        autoPushTimer = null;
+      }
+      // 사용자가 확인창에서 서버 값으로 교체하기로 명시한 경우에만 기존 dirty 상태를 포기한다.
+      localDirty = false;
     }
+    const pullRevision = localRevision;
     const pullBackendKey = backendConfigKey();
     syncBusy = true;
     if (opts.verbose) renderBackendSyncStatus('가져오는 중...', 'info');
     try{
       const data = await callBackend('fetchAll', {});
       if (pullBackendKey !== backendConfigKey()) return false;
+      if (localRevision !== pullRevision || localDirty || autoPushTimer) return false;
       suppressAutoSync = true;
       restoreLocalBackup({ schemaVersion: LOCAL_BACKUP_SCHEMA_VERSION, app: 'sinchun-qt-checkin', data });
       suppressAutoSync = false;
@@ -1696,7 +1746,9 @@
   }
 
   function scheduleAutoPush(){
-    if (suppressAutoSync || !backendConfigured()) return;
+    if (suppressAutoSync) return;
+    localRevision += 1;
+    if (!backendConfigured()) return;
     localDirty = true;
     if (!initialPullComplete) return;
     clearTimeout(autoPushTimer);
@@ -1817,9 +1869,8 @@
   }
 
   function cellMark(name, dateStr){
-    const rec = state.records[dateStr];
-    if (!rec || !Object.prototype.hasOwnProperty.call(rec, name)) return '';
-    return rec[name] ? 'O' : '-';
+    const value = attendanceValue(name, dateStr);
+    return value === undefined || value === null ? '' : (value ? 'O' : '-');
   }
 
   /* 그 달에 기록이 있긴 하지만 전부 -(미완료)뿐이고 O가 한 번도 없는 사람만 나눔표에서 제외.
@@ -1840,12 +1891,12 @@
 
   /* 빈칸 → O → - → 빈칸 순으로 수동 순환 (내보내기 표에서 클릭으로 정정) */
   function cycleMark(name, dateStr){
-    state.records[dateStr] = state.records[dateStr] || {};
-    const rec = state.records[dateStr];
-    if (!Object.prototype.hasOwnProperty.call(rec, name)) rec[name] = true;
-    else if (rec[name] === true) rec[name] = false;
-    else delete rec[name];
-    saveRecords();
+    state.manualOverrides[dateStr] = state.manualOverrides[dateStr] || {};
+    const overrides = state.manualOverrides[dateStr];
+    if (!Object.prototype.hasOwnProperty.call(overrides, name) || overrides[name] === null) overrides[name] = true;
+    else if (overrides[name] === true) overrides[name] = false;
+    else overrides[name] = null;
+    saveManualOverrides();
   }
 
   function renderExportPreview(){

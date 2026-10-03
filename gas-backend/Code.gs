@@ -14,6 +14,7 @@ var SHEETS = {
   PhotoExcluded: ['displayName'],
   Settings:      ['key', 'value'],
   Records:       ['date', 'name', 'present'],
+  ManualOverrides: ['date', 'name', 'value'],
   Readings:      ['date', 'text', 'cachedAt', 'source']
 };
 
@@ -22,6 +23,7 @@ var SHEETS = {
    깨져 나온다. date 컬럼은 서식을 텍스트('@')로 고정해 항상 원래 문자열 그대로 저장/조회되게 한다. */
 var DATE_COLUMNS = {
   Records: [1],
+  ManualOverrides: [1],
   Readings: [1, 3]
 };
 
@@ -145,6 +147,19 @@ function fetchAllData() {
     records[date][name] = present;
   });
 
+  var manualOverrides = {};
+  var manualOverridesSheet = SpreadsheetApp.getActive().getSheetByName('ManualOverrides');
+  if (manualOverridesSheet) {
+    readSheet_('ManualOverrides').forEach(function (r) {
+      var date = String(r[0]), name = String(r[1]), value;
+      if (r[2] === 'blank' || r[2] === null || r[2] === '') value = null;
+      else if (r[2] === true || String(r[2]).toLowerCase() === 'true') value = true;
+      else value = false;
+      if (!manualOverrides[date]) manualOverrides[date] = {};
+      manualOverrides[date][name] = value;
+    });
+  }
+
   var readings = {};
   readSheet_('Readings').forEach(function (r) {
     readings[String(r[0])] = String(r[1] || '');
@@ -157,6 +172,7 @@ function fetchAllData() {
     photoExcluded: photoExcluded,
     settings: settings,
     records: records,
+    manualOverrides: manualOverrides,
     readings: readings
   };
 }
@@ -189,6 +205,21 @@ function pushAllData(payload) {
       });
     });
     writeSheet_('Records', SHEETS.Records, recordRows);
+
+    var manualOverrideRows = [];
+    var manualOverrides = payload.manualOverrides || {};
+    Object.keys(manualOverrides).forEach(function (date) {
+      var byName = manualOverrides[date] || {};
+      Object.keys(byName).forEach(function (name) {
+        var value = byName[name];
+        manualOverrideRows.push([date, name, value === null ? 'blank' : !!value]);
+      });
+    });
+    if (!SpreadsheetApp.getActive().getSheetByName('ManualOverrides')) {
+      var manualOverridesSheet = SpreadsheetApp.getActive().insertSheet('ManualOverrides');
+      manualOverridesSheet.getRange(1, 1, manualOverridesSheet.getMaxRows(), 1).setNumberFormat('@');
+    }
+    writeSheet_('ManualOverrides', SHEETS.ManualOverrides, manualOverrideRows);
 
     var readingRows = [];
     var readings = payload.readings || {};
